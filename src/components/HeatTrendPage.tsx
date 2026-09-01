@@ -6,9 +6,10 @@ import { HeatTrendChart } from "./HeatTrendChart";
 const fullDate = new Intl.DateTimeFormat("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const riskClass = (risk: RiskLevel) => `risk-${risk.toLowerCase().replaceAll(" ", "-")}`;
 
-export function HeatTrendPage({ initialWardId: _initialWardId = 1 }: { initialWardId?: number }) {
-  const [selectedDate, setSelectedDate] = useState("2026-09-01");
-  const selected = puneHeatTrend.find((day) => day.date === selectedDate) ?? puneHeatTrend[7];
+export function HeatTrendPage({ initialWardId: _initialWardId = 1, selectedDate = "2026-09-01", onSelectDate }: { initialWardId?: number; selectedDate?: string; onSelectDate?: (date: string) => void }) {
+  const [localSelectedDate, setLocalSelectedDate] = useState(selectedDate);
+  const activeDate = onSelectDate ? selectedDate : localSelectedDate;
+  const selected = puneHeatTrend.find((day) => day.date === activeDate) ?? puneHeatTrend[7];
   const historical = useMemo(() => puneHeatTrend.filter((day) => day.period === "Historical"), []);
   const sevenDayAverage = Math.round(historical.reduce((total, day) => total + day.score, 0) / historical.length);
   const peak = puneHeatTrend.reduce((highest, day) => day.score > highest.score ? day : highest, puneHeatTrend[0]);
@@ -30,7 +31,7 @@ export function HeatTrendPage({ initialWardId: _initialWardId = 1 }: { initialWa
     <section className="heat-intelligence-layout">
       <article className="panel heat-chart-panel">
         <div className="heat-section-heading"><div><h2>Human thermal risk score</h2><p>Historical observations through today, followed by a simulated seven-day outlook.</p></div><div className="heat-chart-key" aria-label="Trend legend"><span><i className="solid" />Observed</span><span><i className="dashed" />Outlook</span></div></div>
-        <div className="heat-chart-scroll"><HeatTrendChart days={puneHeatTrend} selectedDate={selected.date} onSelect={(day) => setSelectedDate(day.date)} /></div>
+        <div className="heat-chart-scroll"><HeatTrendChart days={puneHeatTrend} selectedDate={selected.date} onSelect={(day) => { setLocalSelectedDate(day.date); onSelectDate?.(day.date); }} /></div>
         <p className="heat-chart-note">Score thresholds: Moderate 20 · High 40 · Very High 60 · Extreme 80. Select a date point to update the briefing.</p>
       </article>
       <aside className="panel daily-intelligence" aria-live="polite">

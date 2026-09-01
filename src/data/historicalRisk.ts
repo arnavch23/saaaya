@@ -1,5 +1,6 @@
 import { historicalWardRisk } from "./puneHistoricalWardRisk";
 import type { HistoricalWardRisk, RiskLevel } from "../types/heat";
+import { thermalStressLevel } from "./thermalStress";
 
 export const historicalRiskSource = {
   label: "REAL HISTORICAL DATA",
@@ -14,11 +15,7 @@ export const availableRiskDates = [...new Set(wardRiskRecords.map((row) => row.d
 const exposureOffsets = [-25, -18, -12, -6, -2, 3, 7, 11, 15, -8, 5] as const;
 
 function riskForOperationalScore(score: number): RiskLevel {
-  if (score < 35) return "Low";
-  if (score < 50) return "Moderate";
-  if (score < 65) return "High";
-  if (score < 80) return "Very High";
-  return "Extreme";
+  return thermalStressLevel(score);
 }
 
 /**
