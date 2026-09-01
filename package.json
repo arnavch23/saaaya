@@ -1,0 +1,30 @@
+{
+  "name": "saaya-command-center",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --configLoader runner",
+    "build": "tsc -b && vite build",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "latest",
+    "@vitejs/plugin-react": "latest",
+    "maplibre-gl": "^6.6.0",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwindcss": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest"
+  }
+}

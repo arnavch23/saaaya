@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@theme { --color-brand: #ff385c; --color-ink: #17202a; --color-muted: #68737f; --color-canvas: #f5f7f8; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 1100px; background: #f5f7f8; color: #17202a; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button { font: inherit; }
+.risk-low { --risk: #34a56f; --risk-bg: #eaf6ef; }.risk-moderate { --risk: #d99b16; --risk-bg: #fff7dc; }.risk-high { --risk: #e77525; --risk-bg: #fff0e7; }.risk-very-high { --risk: #e34d45; --risk-bg: #fff0ee; }.risk-extreme { --risk: #9f2734; --risk-bg: #f9e8eb; }
+.risk-fill { fill: var(--risk); }.risk-label { color: var(--risk); background: var(--risk-bg); }

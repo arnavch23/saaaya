@@ -1,0 +1,9 @@
+﻿node_modules/
+node_modules.corrupt-backup/
+.npm-cache/
+dist/
+work/
+outputs/
+.env
+.env.*
+!.env.example
