@@ -1,481 +1,130 @@
-import { useState } from "react";
-import {
-  alerts,
-  forecast,
-  recommendations,
-} from "./data/mockHeatData";
-import type { HeatLocality, RiskLevel } from "./types/heat";
-import { heatLocalities, priorityLocalities } from "./data/mockHeatLocalities";
+import { useMemo, useState } from "react";
+import { alerts, recommendations } from "./data/mockHeatData";
+import { puneHeatTrend } from "./data/mockHeatTrend";
+import { availableRiskDates, citySummaryForDate, historicalRiskSource, recordForWard, shortDate, wardHistory } from "./data/historicalRisk";
+import type { HistoricalWardRisk, RiskLevel } from "./types/heat";
 import { PuneHeatMap } from "./components/PuneHeatMap";
 import { HeatTrendPage } from "./components/HeatTrendPage";
 
-type View = "overview" | "heat-trend";
+type View = "overview" | "heat-map" | "heat-trend" | "wards" | "forecast" | "alerts" | "reports" | "settings";
+const riskClass = (risk: RiskLevel) => `risk-${risk.toLowerCase().replaceAll(" ", "-")}`;
+const activeRisk = (risk: RiskLevel) => `${riskClass(risk)} text-[var(--risk)]`;
 
-const riskClass = (risk: RiskLevel) =>
-  `risk-${risk.toLowerCase().replaceAll(" ", "-")}`;
-const Icon = ({ name, size = 18 }: { name: string; size?: number }) => {
-  const d: Record<string, string> = {
-    grid: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z",
-    map: "m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15m6-12v15",
-    wards: "M4 20v-7a8 8 0 0 1 16 0v7M2 20h20M8 9a4 4 0 1 1 8 0",
-    chart: "M3 3v18h18M7 16l4-5 3 2 5-7",
-    bell: "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4",
-    report: "M6 3h9l3 3v15H6zM9 12h6m-6 4h6",
-    settings:
-      "M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5ZM19.4 15a1.8 1.8 0 0 0 .36 2l.05.05-2.1 2.1-.05-.05a1.8 1.8 0 0 0-2-.36 1.8 1.8 0 0 0-1.1 1.65V20h-3v-.1a1.8 1.8 0 0 0-1.1-1.65 1.8 1.8 0 0 0-2 .36l-.05.05-2.1-2.1.05-.05A1.8 1.8 0 0 0 6.6 14.5 1.8 1.8 0 0 0 5 13.4h-.1v-3H5a1.8 1.8 0 0 0 1.65-1.1 1.8 1.8 0 0 0-.36-2l-.05-.05 2.1-2.1.05.05a1.8 1.8 0 0 0 2 .36A1.8 1.8 0 0 0 11.5 4V3.9h3V4a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 2-.36l.05-.05 2.1 2.1-.05.05a1.8 1.8 0 0 0-.36 2A1.8 1.8 0 0 0 21 10.5h.1v3H21a1.8 1.8 0 0 0-1.6 1.5Z",
-    refresh: "M20 11a8 8 0 0 0-15-3M4 13a8 8 0 0 0 15 3M5 3v5h5m9 13v-5h-5",
-    more: "M6 12h.01M12 12h.01M18 12h.01",
-    trend: "M3 17l6-6 4 4 7-8M14 7h7v7",
-    collapse: "M15 18 9 12l6-6",
-    expand: "M9 18l6-6-6-6",
+function Icon({ name }: { name: string }) {
+  const paths: Record<string, string> = {
+    grid: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z", map: "m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15m6-12v15",
+    wards: "M4 21V5l8-3 8 3v16M9 21v-4h6v4M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01",
+    chart: "M3 3v18h18M7 16l4-5 3 2 5-7", bell: "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9", report: "M6 3h9l3 3v15H6zM9 12h6m-6 4h6",
+    settings: "M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5", trend: "M3 17l6-6 4 4 7-8M14 7h7v7", chevron: "m9 18 6-6-6-6", menu: "M4 7h16M4 12h16M4 17h16",
   };
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d={d[name]} />
-    </svg>
-  );
-};
-const RiskTag = ({ risk }: { risk: RiskLevel }) => (
-  <span
-    className={`risk-label ${riskClass(risk)} inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[.06em]`}
-  >
-    <i className="h-1.5 w-1.5 rounded-full bg-[var(--risk)]" />
-    {risk}
-  </span>
-);
-
-function navClass(active: boolean, collapsed: boolean) {
-  return `relative flex w-full items-center text-[13px] ${collapsed ? "justify-center px-0 py-2" : "gap-2.5 py-[7px] pr-2 pl-3"} ${active ? "font-medium text-ink" : "text-[#5b6b7c] hover:bg-[#f4f6f8] hover:text-ink"}`;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] ?? ""} /></svg>;
 }
 
-function Sidebar({
-  view,
-  onNavigate,
-  collapsed,
-  onToggle,
-}: {
-  view: View;
-  onNavigate: (view: View) => void;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const nav = [
-    ["grid", "Overview"],
-    ["map", "Heat Map"],
-    ["wards", "Wards"],
-    ["chart", "Forecast"],
-    ["bell", "Alerts"],
-    ["report", "Reports"],
-    ["settings", "Settings"],
+function RiskTag({ risk }: { risk: RiskLevel }) { return <span className={`risk-label ${riskClass(risk)} inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[.06em]`}><i className="h-1.5 w-1.5 rounded-full bg-[var(--risk)]" />{risk}</span>; }
+
+function Sidebar({ view, onNavigate, collapsed, onToggle }: { view: View; onNavigate: (view: View) => void; collapsed: boolean; onToggle: () => void }) {
+  const [intelligenceOpen, setIntelligenceOpen] = useState(view === "heat-map" || view === "heat-trend");
+  const intelligenceActive = view === "heat-map" || view === "heat-trend";
+  const item = (icon: string, label: string, target: View) => <button key={target} type="button" title={collapsed ? label : undefined} onClick={() => onNavigate(target)} className={`sidebar-nav-item ${view === target ? "is-active" : ""}`}><Icon name={icon} /><span>{label}</span></button>;
+  return <aside className={`app-sidebar ${collapsed ? "is-collapsed" : ""}`}>
+    <div className="sidebar-brand"><div className="saaya-emblem" aria-label="साया"><svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><path d="M5.5 20.5V11.5L14 5.5l8.5 6v9" /><path d="M9 20.5v-6h10v6M7.5 20.5h13" /><path d="M14 5.5v9" /></svg></div><div className="sidebar-brand-copy"><b>साया</b><p>Heat Health Intelligence</p></div><button type="button" className="sidebar-collapse" title={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={onToggle}><Icon name="menu" /></button></div>
+    <nav className="sidebar-nav" aria-label="Main navigation">
+      {item("grid", "Overview", "overview")}
+      <div className={`sidebar-group ${intelligenceActive ? "is-active" : ""}`}>
+        <button type="button" title={collapsed ? "Heat Intelligence" : undefined} className="sidebar-nav-item sidebar-group-toggle" aria-expanded={intelligenceOpen} onClick={() => setIntelligenceOpen((open) => !open)}><Icon name="map" /><span>Heat Intelligence</span><i className={intelligenceOpen ? "is-open" : ""}><Icon name="chevron" /></i></button>
+        {intelligenceOpen && <div className="sidebar-subnav">{item("map", "Heat Map", "heat-map")}{item("trend", "Heat Trend", "heat-trend")}</div>}
+      </div>
+      {item("wards", "Wards", "wards")}{item("chart", "Forecast", "forecast")}{item("bell", "Alerts", "alerts")}{item("report", "Reports", "reports")}{item("settings", "Settings", "settings")}
+    </nav>
+    <div className="sidebar-footer"><p>Pune Municipal Corporation</p><span>58 ward boundaries</span></div>
+  </aside>;
+}
+
+function Header({ date, view }: { date: string; view: View }) { return <header className="app-header"><div><h1>Heat Health Command Center</h1><p>Pune · {shortDate(date)} · {view === "heat-trend" ? "Simulated operational outlook" : "Operational prototype"}</p></div><span>Simulated prototype</span></header>; }
+
+function PageIntro({ kicker, title, detail }: { kicker: string; title: string; detail: string }) { return <section className="page-intro"><p>{kicker}</p><h2>{title}</h2><span>{detail}</span></section>; }
+
+function WardDetails({ ward }: { ward: HistoricalWardRisk }) { return <div className="panel p-3.5"><div className="flex items-start justify-between gap-2"><div><p className="text-[9px] font-medium uppercase tracking-[.1em] text-[#8a97a6]">Selected ward</p><h2 className="mt-0.5 text-[15px] font-semibold tracking-[-.02em]">Ward {ward.wardId} · {ward.wardName}</h2></div><RiskTag risk={ward.riskLevel} /></div><div className="mt-3 grid grid-cols-3 divide-x divide-[#eef1f4] border-y border-[#eef1f4] py-2 text-center"><div><b className="block text-[13px] font-semibold">{ward.temperature}°C</b><span className="text-[10px] text-[#5b6b7c]">Temperature</span></div><div><b className="block text-[13px] font-semibold">{ward.humidity}%</b><span className="text-[10px] text-[#5b6b7c]">Humidity</span></div><div><b className="block text-[13px] font-semibold">{ward.windSpeed}</b><span className="text-[10px] text-[#5b6b7c]">km/h wind</span></div></div><dl className="mt-2.5 space-y-1.5 text-[12px]"><div className="flex justify-between"><dt className="text-[#5b6b7c]">Screening WBGT</dt><dd className="font-semibold">{ward.wbgt}°C</dd></div><div className="flex justify-between"><dt className="text-[#5b6b7c]">Thermal risk score</dt><dd className="font-semibold">{ward.thermalRisk} / 100</dd></div></dl></div>; }
+
+type WorkspaceProps = { date: string; selectedWardId: number; onDate: (date: string) => void; onWard: (id: number) => void; compact?: boolean };
+function MapWorkspace({ date, selectedWardId, onDate, onWard, compact = false }: WorkspaceProps) {
+  const summary = useMemo(() => citySummaryForDate(date), [date]);
+  const selected = recordForWard(date, selectedWardId) ?? summary.rows[0];
+  const priority = [...summary.rows].sort((a, b) => b.thermalRisk - a.thermalRisk).slice(0, 5);
+  const distribution = (["Low", "Moderate", "High", "Very High", "Extreme"] as RiskLevel[]).map((risk) => [risk, summary.rows.filter((row) => row.riskLevel === risk).length] as const).filter(([, count]) => count > 0);
+  return <>
+    {!compact && <section className="panel mb-3 flex flex-wrap items-end justify-between gap-4 border-l-[3px] border-l-[#c96826] px-4 py-3"><div><p className="text-[10px] font-medium uppercase tracking-[.08em] text-[#8a97a6]">Ward heat-risk simulation</p><h2 className="mt-1 text-[21px] font-semibold tracking-[-.035em]">Pune · <span className={activeRisk(summary.riskLevel)}>{summary.riskLevel.toUpperCase()}</span> human thermal risk</h2><p className="mt-1 text-[11px] text-[#5b6b7c]">Historical weather inputs with a deterministic ward exposure calibration for prototype operational planning.</p></div><label className="text-[10px] font-medium uppercase tracking-[.06em] text-[#5b6b7c]">Reference date<input type="date" min={availableRiskDates[0]} max={availableRiskDates.at(-1)} value={date} onChange={(event) => availableRiskDates.includes(event.target.value) && onDate(event.target.value)} className="mt-1 block border border-[#dce3e9] bg-white px-2 py-1.5 text-[12px] font-medium text-ink" /></label></section>}
+    <section className="panel mb-3 grid grid-cols-4 divide-x divide-[#eef1f4]">{[["Temperature", `${summary.temperature.toFixed(1)}°C`, "Ward mean, daytime"], ["Human thermal risk", `${summary.score} / 100`, summary.riskLevel], ["High-risk wards", `${summary.highRiskWards} / ${summary.rows.length}`, "High or above"], ["Mean screening WBGT", `${summary.wbgt.toFixed(1)}°C`, "ERA5-derived estimate"]].map(([label, value, note]) => <article className="px-4 py-2.5" key={label}><p className="text-[10px] font-medium uppercase tracking-[.06em] text-[#8a97a6]">{label}</p><p className="mt-0.5 text-[18px] font-semibold">{value}</p><p className="text-[10px] text-[#8a97a6]">{note}</p></article>)}</section>
+    <section className="map-workspace"><div className="panel flex min-h-[480px] flex-col overflow-hidden"><div className="flex items-center justify-between border-b border-[#eef1f4] px-3 py-2"><div><h2 className="text-[13px] font-semibold">Pune Ward Human Thermal Risk</h2><p className="text-[11px] text-[#5b6b7c]">Score-based simulated exposure categories · select a ward for detail</p></div><span className="text-[9px] font-semibold tracking-[.08em] text-[#607080]">SIMULATED</span></div><div className="min-h-[440px] flex-1"><PuneHeatMap wards={summary.rows} selected={selected} onSelect={(ward) => onWard(ward.wardId)} /></div></div><aside className="flex flex-col gap-3"><div className="panel p-3"><h2 className="text-[13px] font-semibold">Risk distribution</h2><div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">{distribution.map(([risk, count]) => <div className="flex items-center justify-between text-[11px]" key={risk}><span className={activeRisk(risk)}>{risk}</span><b>{count}</b></div>)}</div></div><div className="panel p-3"><h2 className="text-[13px] font-semibold">Priority areas</h2><div className="mt-1.5 divide-y divide-[#eef1f4]">{priority.map((ward, index) => <button key={ward.wardId} onClick={() => onWard(ward.wardId)} className={`flex w-full items-center gap-2 py-2 text-left ${selected.wardId === ward.wardId ? "bg-[#f7f8fa] px-1" : ""}`}><span className="w-3 text-[11px] text-[#8a97a6]">{index + 1}</span><span className="min-w-0 flex-1"><b className="block truncate text-[11px]">Ward {ward.wardId} · {ward.wardName}</b><span className="text-[10px] text-[#8a97a6]">Score {ward.thermalRisk} · WBGT {ward.wbgt}°C</span></span><RiskTag risk={ward.riskLevel} /></button>)}</div></div><WardDetails ward={selected} /></aside></section>
+  </>;
+}
+
+function OverviewPage(props: WorkspaceProps) { return <main className="p-4"><PageIntro kicker="Municipal heat command" title="Pune heat-health operations" detail="Ward risk, response readiness and historical weather screening." /><MapWorkspace {...props} compact /><section className="mt-3 grid grid-cols-[1.2fr_1fr] gap-3"><div className="panel p-3.5"><h2 className="text-[13px] font-semibold">Recommended actions</h2><div className="mt-2 grid grid-cols-2 gap-2">{recommendations.slice(0, 4).map((action) => <article className="border border-[#eef1f4] p-3" key={action.title}><p className="text-[9px] font-semibold uppercase tracking-[.08em] text-[#607080]">{action.priority}</p><h3 className="mt-1 text-[12px] font-semibold">{action.title}</h3><p className="mt-1 text-[10px] leading-4 text-[#5b6b7c]">{action.text}</p></article>)}</div></div><div className="panel p-3.5"><h2 className="text-[13px] font-semibold">Active alerts</h2><div className="mt-2 divide-y divide-[#eef1f4]">{alerts.map((alert) => <article className="py-2" key={alert.title}><h3 className="text-[12px] font-semibold">{alert.title}</h3><p className="mt-1 text-[10px] text-[#5b6b7c]">{alert.wards} · {alert.time}</p></article>)}</div></div></section></main>; }
+
+function WardRiskTrend({ wardId }: { wardId: number }) {
+  const history = wardHistory(wardId).slice(-14);
+  const width = 440, height = 132, pad = 14;
+  const path = history.map((day, index) => {
+    const x = pad + (index / Math.max(1, history.length - 1)) * (width - pad * 2);
+    const y = pad + (1 - day.thermalRisk / 100) * (height - pad * 2);
+    return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return <div className="panel p-3"><div className="flex items-baseline justify-between"><div><h3 className="text-[13px] font-semibold">Ward risk trend</h3><p className="mt-0.5 text-[10px] text-[#5b6b7c]">Recent calculated thermal-risk history</p></div><span className="text-[10px] text-[#718093]">14 records</span></div><svg className="mt-3 h-[132px] w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Recent thermal-risk trend"><line x1={pad} x2={width - pad} y1={height * .28} y2={height * .28} stroke="#eef1f4" /><line x1={pad} x2={width - pad} y1={height * .58} y2={height * .58} stroke="#eef1f4" /><path d={path} fill="none" stroke="#a85d43" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />{history.map((day, index) => { const x = pad + (index / Math.max(1, history.length - 1)) * (width - pad * 2); const y = pad + (1 - day.thermalRisk / 100) * (height - pad * 2); return <circle key={day.date} cx={x} cy={y} r="2.4" fill="#fff" stroke="#a85d43" strokeWidth="1.5"><title>{shortDate(day.date)} · score {day.thermalRisk}</title></circle>; })}</svg><div className="flex justify-between text-[9px] text-[#718093]"><span>{history[0] ? shortDate(history[0].date) : ""}</span><span>{history.at(-1) ? shortDate(history.at(-1)!.date) : ""}</span></div></div>;
+}
+
+function WardAnalysisPanel({ ward }: { ward: HistoricalWardRisk }) {
+  const contribution = (value: number, lower: number, upper: number) => Math.max(8, Math.min(100, Math.round(((value - lower) / (upper - lower)) * 100)));
+  const factors = [
+    ["Temperature", contribution(ward.temperature, 28, 43), `${ward.temperature.toFixed(1)}°C`, "#a85d43"],
+    ["Humidity", contribution(ward.humidity, 20, 80), `${ward.humidity}%`, "#b57b39"],
+    ["Wind cooling", contribution(ward.windSpeed, 0, 22), `${ward.windSpeed.toFixed(1)} km/h`, "#577186"],
+    ["Solar radiation", contribution(ward.solarRadiation, 350, 950), `${ward.solarRadiation} W/m²`, "#9a6252"],
   ] as const;
-  return (
-    <aside
-      className={`fixed inset-y-0 left-0 z-20 flex flex-col border-r border-[#e4e9ee] bg-white py-3.5 transition-[width] duration-200 ${collapsed ? "w-[60px] px-1.5" : "w-[196px] px-2"}`}
-    >
-      <div className={`mb-5 ${collapsed ? "flex flex-col items-center gap-2" : "px-1.5"}`}>
-        <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
-          <div className="flex items-center gap-2">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] bg-ink text-[11px] font-semibold tracking-wide text-white">
-              S
-            </span>
-            {!collapsed && (
-              <span className="text-[15px] font-semibold tracking-[-.03em]">SAAYA</span>
-            )}
-          </div>
-          {!collapsed && (
-            <button
-              type="button"
-              aria-label="Collapse navigation"
-              onClick={onToggle}
-              className="grid h-7 w-7 place-items-center rounded-[6px] text-[#8a97a6] hover:bg-[#f4f6f8] hover:text-ink"
-            >
-              <Icon name="collapse" size={15} />
-            </button>
-          )}
-        </div>
-        {collapsed ? (
-          <button
-            type="button"
-            aria-label="Expand navigation"
-            onClick={onToggle}
-            className="grid h-7 w-7 place-items-center rounded-[6px] text-[#8a97a6] hover:bg-[#f4f6f8] hover:text-ink"
-          >
-            <Icon name="expand" size={15} />
-          </button>
-        ) : (
-          <p className="mt-1.5 text-[9px] font-medium uppercase tracking-[.14em] text-[#8a97a6]">
-            Heat Health Intelligence
-          </p>
-        )}
-      </div>
-      <nav className="flex min-h-0 flex-1 flex-col">
-        <div className="space-y-0.5">
-          {nav.map(([icon, label]) => {
-            const active = view === "overview" && label === "Overview";
-            return (
-              <button
-                key={label}
-                type="button"
-                title={label}
-                onClick={label === "Overview" ? () => onNavigate("overview") : undefined}
-                className={navClass(active, collapsed)}
-              >
-                {active && (
-                  <span className={`absolute top-1.5 bottom-1.5 w-[2px] bg-ink ${collapsed ? "left-0" : "left-0"}`} />
-                )}
-                <Icon name={icon} size={16} />
-                {!collapsed && label}
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-2 border-t border-[#eef1f4] pt-2">
-          <button
-            type="button"
-            title="Heat Trend"
-            onClick={() => onNavigate("heat-trend")}
-            className={navClass(view === "heat-trend", collapsed)}
-          >
-            {view === "heat-trend" && (
-              <span className="absolute top-1.5 bottom-1.5 left-0 w-[2px] bg-ink" />
-            )}
-            <Icon name="trend" size={16} />
-            {!collapsed && "Heat Trend"}
-          </button>
-        </div>
-      </nav>
-      <div className={`mt-auto border-t border-[#eef1f4] pt-3 ${collapsed ? "px-0 text-center" : "px-1.5"}`}>
-        {collapsed ? (
-          <p className="text-[9px] font-semibold tracking-wide text-[#5b6b7c]">PMC</p>
-        ) : (
-          <>
-            <p className="text-[11px] font-medium text-ink">Pune Municipal Corporation</p>
-            <p className="mt-0.5 text-[10px] text-[#8a97a6]">Municipal coverage · 75 wards</p>
-          </>
-        )}
-      </div>
-    </aside>
-  );
+  const drivers = [ward.temperature >= 37 && "high temperature", ward.humidity >= 55 && "high humidity", ward.windSpeed <= 8 && "limited wind cooling", ward.solarRadiation >= 800 && "strong solar radiation"].filter(Boolean) as string[];
+  const explanation = drivers.length ? `${drivers.slice(0, -1).join(", ")}${drivers.length > 1 ? " and " : ""}${drivers.at(-1)} ${drivers.length === 1 ? "is increasing" : "are increasing"} human thermal stress in this ward.` : ward.windSpeed >= 12 ? "Strong wind cooling is offsetting the ward's current heat and solar exposure, keeping thermal stress comparatively contained." : "Current temperature, humidity, wind and solar conditions are producing a moderate thermal-stress profile.";
+  const impact: Record<RiskLevel, "Low" | "Moderate" | "High" | "Very High"> = { Low: "Low", Moderate: "Moderate", High: "High", "Very High": "Very High", Extreme: "Very High" };
+  const actions: Record<RiskLevel, string[]> = { Low: ["Maintain routine ward heat surveillance"], Moderate: ["Review water-point readiness", "Maintain public heat-safety messaging"], High: ["Increase drinking-water availability", "Issue outdoor-worker advisory"], "Very High": ["Prepare cooling centres", "Notify healthcare facilities", "Increase water availability"], Extreme: ["Activate heat response plan", "Open cooling centres", "Notify healthcare facilities", "Issue public and outdoor-worker advisory"] };
+  return <aside className="space-y-3">
+    <section className="panel p-3.5"><div className="flex items-start justify-between gap-2"><div><p className="text-[9px] font-bold uppercase tracking-[.1em] text-[#718093]">Selected ward</p><h2 className="mt-1 text-[15px] font-semibold tracking-[-.02em]">Ward {ward.wardId} · {ward.wardName}</h2></div><RiskTag risk={ward.riskLevel} /></div><div className="mt-3 grid grid-cols-3 divide-x divide-[#eef1f4] border-y border-[#eef1f4] py-2 text-center"><div><b className="block text-[13px] font-semibold">{ward.temperature.toFixed(1)}°C</b><span className="text-[9px] text-[#5b6b7c]">Temperature</span></div><div><b className="block text-[13px] font-semibold">{ward.humidity}%</b><span className="text-[9px] text-[#5b6b7c]">Humidity</span></div><div><b className="block text-[13px] font-semibold">{ward.windSpeed.toFixed(1)}</b><span className="text-[9px] text-[#5b6b7c]">km/h wind</span></div></div><dl className="mt-2 divide-y divide-[#eef1f4] text-[11px]"><div className="flex justify-between py-1.5"><dt className="text-[#5b6b7c]">Solar radiation</dt><dd>{ward.solarRadiation} W/m²</dd></div><div className="flex justify-between py-1.5"><dt className="text-[#5b6b7c]">Screening WBGT</dt><dd>{ward.wbgt.toFixed(1)}°C</dd></div><div className="flex justify-between py-1.5"><dt className="text-[#5b6b7c]">Thermal risk score</dt><dd className="font-semibold">{ward.thermalRisk} / 100</dd></div></dl></section>
+    <section className="panel p-3.5"><h3 className="text-[13px] font-semibold">Why is this area at risk?</h3><div className="mt-3 space-y-2.5">{factors.map(([label, value, display, color]) => <div key={label}><div className="mb-1 flex justify-between text-[10px]"><span className="text-[#5b6b7c]">{label}</span><span>{display}</span></div><div className="h-1.5 overflow-hidden rounded bg-[#edf0f2]"><div className="h-full rounded" style={{ width: `${value}%`, background: color }} /></div></div>)}</div><p className="mt-3 border-l-2 border-[#a85d43] pl-2.5 text-[10px] leading-4 text-[#536475]">{explanation}</p></section>
+    <section className="panel p-3.5"><h3 className="text-[13px] font-semibold">Population exposure</h3><dl className="mt-2 divide-y divide-[#eef1f4] text-[11px]"><div className="flex justify-between py-1.5"><dt className="text-[#5b6b7c]">Population exposed</dt><dd>Data unavailable</dd></div><div className="flex justify-between py-1.5"><dt className="text-[#5b6b7c]">Elderly exposure</dt><dd>Data unavailable</dd></div><div className="flex justify-between py-1.5"><dt className="text-[#5b6b7c]">Outdoor-worker exposure</dt><dd>Data unavailable</dd></div><div className="flex justify-between py-1.5"><dt className="text-[#5b6b7c]">Overall vulnerability</dt><dd>Data unavailable</dd></div></dl></section>
+    <section className="panel p-3.5"><h3 className="text-[13px] font-semibold">Potential health impact</h3><p className={`mt-2 text-[14px] font-semibold ${activeRisk(ward.riskLevel)}`}>{impact[ward.riskLevel]}</p><p className="mt-1 text-[10px] leading-4 text-[#5b6b7c]">{ward.riskLevel === "Low" ? "Thermal stress is currently limited; continue routine monitoring." : `${ward.riskLevel} thermal risk may increase heat strain for people with prolonged outdoor exposure or limited cooling access.`}</p></section>
+    <section className="panel border-l-[3px] border-l-[#a85d43] p-3.5"><h3 className="text-[13px] font-semibold">Recommended municipal action</h3><ul className="mt-2 space-y-1.5 text-[11px] text-[#3f5061]">{actions[ward.riskLevel].map((action) => <li className="flex gap-2" key={action}><span className="mt-[6px] h-1 w-1 shrink-0 rounded-full bg-[#a85d43]" />{action}</li>)}</ul></section>
+  </aside>;
 }
-function Header() {
-  return (
-    <header className="flex h-12 items-center justify-between border-b border-[#e4e9ee] bg-white px-5">
-      <div>
-        <h1 className="text-[13px] font-semibold tracking-[-.02em] text-ink">
-          Heat Health Command Center
-        </h1>
-        <p className="text-[11px] text-[#5b6b7c]">Pune · Municipal coverage · Today</p>
-      </div>
-      <div className="flex items-center gap-4 text-[12px]">
-        <button className="flex items-center gap-1.5 text-[11px] text-[#5b6b7c] hover:text-ink">
-          Last updated 10 min ago <Icon name="refresh" size={13} />
-        </button>
-        <span className="text-[#3d4f61]">Pune Municipal Corporation</span>
-        <span className="flex items-center gap-1.5 text-[11px] text-[#5b6b7c]">
-          <i className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-          System operational
-        </span>
-        <button className="grid h-7 w-7 place-items-center rounded-[6px] text-[#5b6b7c] hover:bg-[#f4f6f8]">
-          <Icon name="more" size={16} />
-        </button>
-      </div>
-    </header>
-  );
+
+function WardsPage({ date, selectedWardId, onWard }: Pick<WorkspaceProps, "date" | "selectedWardId" | "onWard">) {
+  const summary = useMemo(() => citySummaryForDate(date), [date]);
+  const [query, setQuery] = useState("");
+  const [riskFilter, setRiskFilter] = useState<"All" | RiskLevel>("All");
+  const [focusedWardId, setFocusedWardId] = useState<number | null>(selectedWardId);
+  const rows = useMemo(() => [...summary.rows].filter((ward) => riskFilter === "All" || ward.riskLevel === riskFilter).filter((ward) => `${ward.wardId} ${ward.wardName}`.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => b.thermalRisk - a.thermalRisk), [summary.rows, query, riskFilter]);
+  const selected = focusedWardId === null ? null : recordForWard(date, focusedWardId);
+  const selectWard = (ward: HistoricalWardRisk) => { setFocusedWardId(ward.wardId); onWard(ward.wardId); };
+  return <main className="p-4"><PageIntro kicker="Ward intelligence" title="Ward-level heat risk" detail="Search, screen and act on calculated ward thermal-risk intelligence." /><section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]"><div className="min-w-0"><div className="panel mb-3 flex flex-wrap items-end gap-3 p-3"><label className="min-w-[220px] flex-1 text-[9px] font-bold uppercase tracking-[.08em] text-[#718093]">Search ward or locality<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="e.g. 9 or Yerwada" className="mt-1 block w-full border border-[#dce3e9] bg-white px-2 py-1.5 text-[12px] font-medium normal-case text-[#172536] outline-none focus:border-[#a85d43]" /></label><label className="min-w-[150px] text-[9px] font-bold uppercase tracking-[.08em] text-[#718093]">Risk level<select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value as "All" | RiskLevel)} className="mt-1 block w-full border border-[#dce3e9] bg-white px-2 py-1.5 text-[12px] font-medium normal-case text-[#172536]"><option value="All">All levels</option>{(["Low", "Moderate", "High", "Very High", "Extreme"] as RiskLevel[]).map((risk) => <option key={risk}>{risk}</option>)}</select></label>{focusedWardId !== null && <button type="button" onClick={() => setFocusedWardId(null)} className="border border-[#dce3e9] px-2.5 py-1.5 text-[11px] font-semibold text-[#526273] hover:bg-[#f7f8fa]">Clear selection</button>}</div><div className="panel overflow-x-auto"><div className="min-w-[820px]"><div className="grid grid-cols-[48px_minmax(180px,1fr)_76px_100px_72px_128px_116px] border-b border-[#e8edf1] px-3 py-2 text-[9px] font-bold uppercase tracking-[.08em] text-[#718093]"><span>Ward</span><span>Locality / area</span><span>Risk score</span><span>Risk level</span><span>WBGT</span><span>Population exposure</span><span>Vulnerability</span></div>{rows.map((ward) => <button key={ward.wardId} onClick={() => selectWard(ward)} className={`grid w-full grid-cols-[48px_minmax(180px,1fr)_76px_100px_72px_128px_116px] items-center border-b border-[#eef1f4] px-3 py-2.5 text-left ${focusedWardId === ward.wardId ? "bg-[#f6f8fa]" : "hover:bg-[#fafbfc]"}`}><span className="text-[11px] font-semibold">{ward.wardId}</span><span className="truncate pr-2 text-[11px]">{ward.wardName}</span><span className="text-[11px] font-semibold">{ward.thermalRisk}</span><RiskTag risk={ward.riskLevel} /><span className="text-[11px]">{ward.wbgt.toFixed(1)}°C</span><span className="text-[10px] text-[#718093]">Data unavailable</span><span className="text-[10px] text-[#718093]">Data unavailable</span></button>)}{rows.length === 0 && <p className="px-3 py-8 text-center text-[12px] text-[#718093]">No wards match the current search and risk filter.</p>}</div></div></div>{selected ? <div className="min-w-0"><WardAnalysisPanel ward={selected} /><div className="mt-3"><WardRiskTrend wardId={selected.wardId} /></div></div> : <aside className="panel flex min-h-[180px] items-center justify-center p-5 text-center text-[12px] leading-5 text-[#718093]">Select a ward from the table to view current conditions, risk contributors and municipal actions.</aside>}</section></main>;
 }
-function AreaDetails({ area }: { area: HeatLocality }) {
-  return (
-    <div className="panel p-3.5">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[9px] font-medium uppercase tracking-[.1em] text-[#8a97a6]">
-            Selected area
-          </p>
-          <h2 className="mt-0.5 text-[16px] font-semibold tracking-[-.02em]">{area.locality}</h2>
-        </div>
-        <RiskTag risk={area.thermalRisk} />
-      </div>
-      <div className="mt-3 grid grid-cols-3 divide-x divide-[#eef1f4] border-y border-[#eef1f4] py-2 text-center">
-        <div>
-          <b className="block text-[13px] font-semibold">{area.temperature}°C</b>
-          <span className="text-[10px] text-[#5b6b7c]">Temperature</span>
-        </div>
-        <div>
-          <b className="block text-[13px] font-semibold">{area.humidity}%</b>
-          <span className="text-[10px] text-[#5b6b7c]">Humidity</span>
-        </div>
-        <div>
-          <b className="block text-[13px] font-semibold">{area.windSpeed} km/h</b>
-          <span className="text-[10px] text-[#5b6b7c]">Wind</span>
-        </div>
-      </div>
-      <div className="mt-2.5 space-y-1.5 text-[12px]">
-        <p className="flex justify-between">
-          <span className="text-[#5b6b7c]">Human thermal risk</span>
-          <b className={`${riskClass(area.thermalRisk)} text-[var(--risk)]`}>{area.thermalRisk}</b>
-        </p>
-        <p className="flex justify-between">
-          <span className="text-[#5b6b7c]">Risk intensity</span>
-          <b>{Math.round(area.riskIntensity * 100)}</b>
-        </p>
-        <p className="flex justify-between">
-          <span className="text-[#5b6b7c]">Coordinates</span>
-          <b className="font-medium tabular-nums">
-            {area.latitude.toFixed(3)}, {area.longitude.toFixed(3)}
-          </b>
-        </p>
-      </div>
-      <div className="mt-3 border-l-2 border-[#c5ced6] pl-2.5 text-[11px] leading-4 text-[#3d4f61]">
-        <b className="font-medium text-ink">Recommended:</b> Activate cooling-centre and outdoor-worker advisory.
-      </div>
-    </div>
-  );
-}
+
+function ForecastPage() { const outlook = puneHeatTrend.filter((day) => day.period === "Forecast"); return <main className="p-4"><PageIntro kicker="Forecast operations" title="Upcoming heat conditions" detail="Simulated seven-day outlook for advance municipal readiness." /><section className="panel overflow-hidden"><div className="grid grid-cols-[1.2fr_repeat(5,minmax(80px,1fr))] border-b border-[#e8edf1] px-4 py-2 text-[9px] font-bold uppercase tracking-[.08em] text-[#718093]"><span>Date</span><span>Risk</span><span>Score</span><span>Maximum</span><span>Humidity</span><span>Confidence</span></div>{outlook.map((day) => <div className="grid grid-cols-[1.2fr_repeat(5,minmax(80px,1fr))] items-center border-b border-[#eef1f4] px-4 py-3 text-[12px]" key={day.date}><span className="font-semibold">{day.weekday} · {day.label}</span><RiskTag risk={day.risk} /><span>{day.score} / 100</span><span>{day.maxTemperature}°C</span><span>{day.humidity}%</span><span>{day.forecastConfidence}</span></div>)}</section><section className="panel mt-3 p-4"><p className="text-[9px] font-bold uppercase tracking-[.08em] text-[#718093]">Planning note</p><p className="mt-1 text-[12px] text-[#516274]">This simulated outlook should be used to exercise cooling-centre readiness, field staffing and public-advisory workflows; it is not a live weather forecast.</p></section></main>; }
+
+function AlertsPage() { return <main className="p-4"><PageIntro kicker="Operational warnings" title="Active heat alerts" detail="Simulated alerts requiring municipal review and response coordination." /><section className="grid gap-3 lg:grid-cols-2">{alerts.map((alert) => <article className="panel border-l-[3px] border-l-[#ad5a28] p-4" key={alert.title}><p className="text-[9px] font-bold uppercase tracking-[.08em] text-[#718093]">{alert.status}</p><h3 className="mt-1 text-[15px] font-semibold">{alert.title}</h3><p className="mt-2 text-[12px] text-[#5b6b7c]">{alert.wards} · {alert.time}</p><button className="mt-4 border border-[#cfd8e1] px-2.5 py-1 text-[11px] font-semibold text-[#26384a]" type="button">Review response</button></article>)}</section></main>; }
+
+function ReportsPage({ date }: { date: string }) { const summary = useMemo(() => citySummaryForDate(date), [date]); const history = wardHistory(1).slice(-5); return <main className="p-4"><PageIntro kicker="Historical intelligence" title="Heat reports" detail="Archive summaries and ward-level screening history for retrospective review." /><section className="grid gap-3 lg:grid-cols-[1.2fr_.8fr]"><article className="panel p-4"><h3 className="text-[13px] font-semibold">Reference-day report</h3><dl className="mt-3 divide-y divide-[#eef1f4] text-[12px]"><div className="flex justify-between py-2"><dt>Reference date</dt><dd>{shortDate(date)}</dd></div><div className="flex justify-between py-2"><dt>City risk score</dt><dd>{summary.score} / 100</dd></div><div className="flex justify-between py-2"><dt>High-risk wards</dt><dd>{summary.highRiskWards} / {summary.rows.length}</dd></div><div className="flex justify-between py-2"><dt>Method</dt><dd>Simulated operational calibration</dd></div></dl></article><article className="panel p-4"><h3 className="text-[13px] font-semibold">Ward 1 recent history</h3><div className="mt-3 space-y-2">{history.map((day) => <div className="flex justify-between text-[11px]" key={day.date}><span>{shortDate(day.date)}</span><span className={activeRisk(day.riskLevel)}>{day.thermalRisk} · {day.riskLevel}</span></div>)}</div></article></section></main>; }
+
+function SettingsPage() { const [enabled, setEnabled] = useState(true); return <main className="p-4"><PageIntro kicker="Application settings" title="System configuration" detail="Prototype settings for municipal operational display preferences." /><section className="panel max-w-[760px] divide-y divide-[#e8edf1]"><div className="flex items-center justify-between gap-4 p-4"><div><h3 className="text-[13px] font-semibold">Operational prototype labelling</h3><p className="mt-1 text-[11px] text-[#5b6b7c]">Keep simulated prototype indicators visible across the command center.</p></div><button type="button" aria-pressed={enabled} onClick={() => setEnabled((value) => !value)} className={`settings-toggle ${enabled ? "is-on" : ""}`}><span /></button></div><div className="p-4"><h3 className="text-[13px] font-semibold">Data source</h3><p className="mt-1 text-[11px] text-[#5b6b7c]">{historicalRiskSource.provider}. The dashboard applies a fixed prototype exposure calibration for risk-map scenario planning.</p></div></section></main>; }
+
 function App() {
-  const [view, setView] = useState<View>("overview");
-  const [navCollapsed, setNavCollapsed] = useState(false);
-  const [selected, setSelected] = useState(priorityLocalities[0]);
-  const toggleNav = () => {
-    setNavCollapsed((open) => !open);
-    window.setTimeout(() => window.dispatchEvent(new Event("resize")), 220);
-  };
-  return (
-    <>
-      <Sidebar
-        view={view}
-        onNavigate={setView}
-        collapsed={navCollapsed}
-        onToggle={toggleNav}
-      />
-      <div
-        className={`transition-[margin] duration-200 ${navCollapsed ? "ml-[60px]" : "ml-[196px]"}`}
-      >
-        <Header />
-        {view === "heat-trend" ? (
-          <HeatTrendPage />
-        ) : (
-        <main className="p-4">
-          <section className="panel mb-3 flex overflow-hidden max-[1100px]:flex-col">
-            <div className="flex min-w-0 flex-1 items-center border-l-[3px] border-l-[#ef7a14] px-4 py-3 max-[1100px]:border-b max-[1100px]:border-[#eef1f4] min-[1101px]:border-r min-[1101px]:border-r-[#eef1f4]">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-medium uppercase tracking-[.08em] text-[#8a97a6]">
-                    Current city status
-                  </span>
-                  <span className="rounded px-1.5 py-px text-[9px] font-medium uppercase tracking-[.06em] text-[#8a97a6] ring-1 ring-[#e4e9ee]">
-                    Prototype simulation
-                  </span>
-                </div>
-                <h2 className="mt-1 text-[22px] font-semibold leading-none tracking-[-.035em]">
-                  Pune is under{" "}
-                  <span className="text-[#ef7a14]">HIGH</span>{" "}
-                  <span className="font-medium text-ink">human thermal stress</span>
-                </h2>
-                <p className="mt-1.5 max-w-2xl text-[12px] leading-4 text-[#5b6b7c]">
-                  Thermal risk is calculated from temperature, humidity and wind conditions rather than temperature alone.
-                </p>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 divide-x divide-[#eef1f4] min-[1101px]:w-[420px]">
-              <div className="px-3 py-3 text-center">
-                <b className="block text-[16px] font-semibold tabular-nums">41°C</b>
-                <span className="mt-0.5 block text-[10px] text-[#5b6b7c]">Temperature</span>
-              </div>
-              <div className="px-3 py-3 text-center">
-                <b className="block text-[16px] font-semibold tabular-nums">68%</b>
-                <span className="mt-0.5 block text-[10px] text-[#5b6b7c]">Humidity</span>
-              </div>
-              <div className="px-3 py-3 text-center">
-                <b className="block text-[16px] font-semibold tabular-nums">5</b>
-                <span className="mt-0.5 block text-[10px] text-[#5b6b7c]">km/h wind</span>
-              </div>
-              <div className="flex flex-col items-center justify-center px-3 py-3">
-                <RiskTag risk="High" />
-                <span className="mt-1 block text-[10px] text-[#5b6b7c]">Human risk</span>
-              </div>
-            </div>
-          </section>
-          <section className="panel mb-3 grid grid-cols-4 divide-x divide-[#eef1f4] max-[1100px]:grid-cols-2 max-[1100px]:divide-x-0 max-[1100px]:divide-y">
-            {[
-              ["Temperature", "41°C", "+4°C above seasonal normal", false],
-              ["Human Thermal Risk", "HIGH", "Based on combined environmental stress", true],
-              ["High-Risk Wards", "12 / 75", "3 wards entered high-risk status today", false],
-              ["Health Impact Risk", "ELEVATED", "Hospital demand may increase", true],
-            ].map(([label, value, sub, accent]) => (
-              <article key={String(label)} className="px-4 py-2.5">
-                <p className="text-[10px] font-medium uppercase tracking-[.06em] text-[#8a97a6]">{label}</p>
-                <p className={`mt-0.5 text-[18px] font-semibold tabular-nums ${accent ? "text-[#ef7a14]" : "text-ink"}`}>
-                  {value}
-                </p>
-                <p className="mt-0.5 text-[11px] text-[#8a97a6]">{sub}</p>
-              </article>
-            ))}
-          </section>
-          <section className="grid grid-cols-[minmax(0,1fr)_280px] gap-3 max-[1120px]:grid-cols-1">
-            <div className="panel flex min-h-[440px] flex-col overflow-hidden">
-              <div className="flex items-center justify-between border-b border-[#eef1f4] px-3 py-2">
-                <div>
-                  <h2 className="text-[13px] font-semibold">Pune Human Thermal Risk Map</h2>
-                  <p className="text-[11px] text-[#5b6b7c]">
-                    Ward-level thermal risk zones · GIS operations view
-                  </p>
-                </div>
-                <span className="text-[10px] font-medium uppercase tracking-[.06em] text-[#8a97a6]">
-                  Simulated data
-                </span>
-              </div>
-              <div className="relative min-h-[440px] flex-1">
-                <PuneHeatMap
-                  localities={heatLocalities}
-                  selected={selected}
-                  onSelect={setSelected}
-                />
-                <p className="pointer-events-none absolute right-3 bottom-8 z-[500] text-[10px] text-[#5b6b7c]">
-                  Simulated ward risk zones · OpenStreetMap
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-3">
-              <div className="panel p-3">
-                <h2 className="text-[13px] font-semibold">Priority Areas</h2>
-                <p className="text-[11px] text-[#5b6b7c]">Areas requiring attention</p>
-                <div className="mt-1.5 divide-y divide-[#eef1f4]">
-                  {priorityLocalities.map((area, i) => (
-                    <button
-                      onClick={() => setSelected(area)}
-                      className={`flex w-full items-center gap-2 py-2 text-left ${selected.locality === area.locality ? "bg-[#f7f8fa] px-1" : ""}`}
-                      key={area.locality}
-                    >
-                      <span className="w-3.5 text-[11px] tabular-nums text-[#8a97a6]">
-                        {i + 1}
-                      </span>
-                      <i
-                        className={`h-2 w-2 rounded-full ${riskClass(area.thermalRisk)} bg-[var(--risk)]`}
-                      />
-                      <span className="flex-1 text-[13px] font-medium">
-                        {area.locality}
-                      </span>
-                      <div className="text-right">
-                        <RiskTag risk={area.thermalRisk} />
-                        <span className="mt-0.5 block text-[10px] tabular-nums text-[#8a97a6]">
-                          Intensity {Math.round(area.riskIntensity * 100)}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <AreaDetails area={selected} />
-            </div>
-          </section>
-          <section className="mt-3 grid grid-cols-[minmax(380px,1fr)_minmax(0,1.25fr)] gap-3 max-[1180px]:grid-cols-1">
-            <div className="panel p-3.5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-[13px] font-semibold">5-Day Human Thermal Risk Forecast</h2>
-                  <p className="text-[11px] text-[#5b6b7c]">Forecast risk, not temperature alone</p>
-                </div>
-                <span className="text-[10px] uppercase tracking-[.06em] text-[#8a97a6]">Simulated</span>
-              </div>
-              <div className="mt-3 grid grid-cols-5 gap-2">
-                {forecast.map((f, i) => (
-                  <div className="flex min-w-0 flex-col items-center" key={f.day}>
-                    <div className="flex h-[88px] w-full items-end justify-center border-b border-[#eef1f4]">
-                      <div
-                        className={`${riskClass(f.risk)} w-full max-w-9 rounded-t-[4px] bg-[var(--risk)]`}
-                        style={{ height: `${[46, 62, 84, 52, 32][i]}px` }}
-                      />
-                    </div>
-                    <b className="mt-1.5 whitespace-nowrap text-[10px] font-semibold">{f.day}</b>
-                    <span className={`mt-0.5 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[.04em] ${riskClass(f.risk)} text-[var(--risk)]`}>{f.risk}</span>
-                    <span className="text-[10px] tabular-nums text-[#8a97a6]">
-                      {f.temperature}°C
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="panel p-3.5">
-              <h2 className="text-[13px] font-semibold">Recommended Actions</h2>
-              <p className="text-[11px] text-[#5b6b7c]">Prioritized for municipal response</p>
-              <div className="mt-2.5 grid grid-cols-2 gap-px overflow-hidden rounded-[8px] border border-[#e4e9ee] bg-[#e4e9ee]">
-                {recommendations.map((a) => (
-                  <article className="flex min-h-[118px] flex-col bg-white p-3" key={a.title}>
-                    <p className="text-[9px] font-semibold uppercase tracking-[.08em] text-[#5b6b7c]">
-                      {a.priority}
-                    </p>
-                    <h3 className="mt-0.5 text-[13px] font-semibold">{a.title}</h3>
-                    <p className="mt-1 text-[11px] leading-4 text-[#5b6b7c]">
-                      {a.text}
-                    </p>
-                    <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-                      <span className="text-[10px] text-[#8a97a6]">
-                        {a.wards}
-                      </span>
-                      <button className="shrink-0 whitespace-nowrap text-[11px] font-medium text-ink">
-                        {a.action} →
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </section>
-          <section className="mt-3 grid grid-cols-[1.45fr_1fr] gap-3">
-            <div className="panel p-3.5">
-              <h2 className="text-[13px] font-semibold">Active Alerts</h2>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {alerts.map((a) => (
-                  <div className="rounded-[8px] border border-[#eef1f4] px-3 py-2.5" key={a.title}>
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-[13px] font-medium">{a.title}</h3>
-                      <span className="shrink-0 rounded px-1.5 py-px text-[9px] font-semibold uppercase tracking-[.05em] text-[#5b6b7c] ring-1 ring-[#e4e9ee]">
-                        Active
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-[#5b6b7c]">
-                      {a.wards} · {a.time}
-                    </p>
-                    <p className="mt-1 text-[11px] text-ink">
-                      {a.status}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="panel p-3.5">
-              <p className="text-[9px] font-medium uppercase tracking-[.1em] text-[#8a97a6]">
-                System & data status
-              </p>
-              <div className="mt-2 flex items-center justify-between text-[13px]">
-                <span className="text-[#3d4f61]">Weather inputs</span>
-                <span className="text-[12px] text-[#5b6b7c]">Updated 10 min ago</span>
-              </div>
-              <div className="mt-2 flex items-center justify-between text-[13px]">
-                <span className="text-[#3d4f61]">Ward risk engine</span>
-                <span className="flex items-center gap-1.5 text-[12px] text-[#5b6b7c]">
-                  <i className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                  Operational
-                </span>
-              </div>
-              <p className="mt-3 border-t border-[#eef1f4] pt-2 text-[11px] leading-4 text-[#8a97a6]">
-                All readings and recommendations shown are prototype simulation
-                data, not live municipal alerts.
-              </p>
-            </div>
-          </section>
-        </main>
-        )}
-      </div>
-    </>
-  );
+  const [view, setView] = useState<View>("overview"); const [date, setDate] = useState(availableRiskDates.at(-1)!); const [selectedWardId, setSelectedWardId] = useState(1); const [collapsed, setCollapsed] = useState(false);
+  const workspace = { date, selectedWardId, onDate: setDate, onWard: setSelectedWardId };
+  let content: React.ReactNode;
+  if (view === "heat-trend") content = <HeatTrendPage initialWardId={selectedWardId} />;
+  else if (view === "heat-map") content = <main className="p-4"><PageIntro kicker="Heat intelligence" title="Pune ward heat map" detail="Interactive score-based ward risk for simulated heat-response planning." /><MapWorkspace {...workspace} /></main>;
+  else if (view === "wards") content = <WardsPage {...workspace} />;
+  else if (view === "forecast") content = <ForecastPage />;
+  else if (view === "alerts") content = <AlertsPage />;
+  else if (view === "reports") content = <ReportsPage date={date} />;
+  else if (view === "settings") content = <SettingsPage />;
+  else content = <OverviewPage {...workspace} />;
+  return <><Sidebar view={view} onNavigate={setView} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} /><div className={`app-content ${collapsed ? "sidebar-collapsed" : ""}`}><Header date={date} view={view} />{content}</div></>;
 }
+
 export default App;

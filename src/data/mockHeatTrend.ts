@@ -1,31 +1,27 @@
 import type { HeatTrendDay, RiskLevel } from "../types/heat";
 
 export const HEAT_TREND_SCORE_MAX = 100;
-
-export const heatTrendBands: {
-  from: number;
-  to: number;
-  risk: RiskLevel;
-  color: string;
-}[] = [
-  { from: 0, to: 20, risk: "Low", color: "#34a56f" },
-  { from: 20, to: 40, risk: "Moderate", color: "#d99b16" },
-  { from: 40, to: 60, risk: "High", color: "#e77525" },
-  { from: 60, to: 80, risk: "Very High", color: "#e34d45" },
-  { from: 80, to: 100, risk: "Extreme", color: "#9f2734" },
+export const heatTrendBands: { from: number; to: number; risk: RiskLevel; color: string }[] = [
+  { from: 0, to: 20, risk: "Low", color: "#3d8362" }, { from: 20, to: 40, risk: "Moderate", color: "#ad7a1b" },
+  { from: 40, to: 60, risk: "High", color: "#c96826" }, { from: 60, to: 80, risk: "Very High", color: "#b84642" },
+  { from: 80, to: 100, risk: "Extreme", color: "#6e2949" },
 ];
 
-/**
- * Simulated 7-day city-level heat indication.
- * Kept apart from `mockHeatData` so it can later be replaced by a trend API
- * without changing today's live/overview snapshot.
- */
-export const heatTrendDays: HeatTrendDay[] = [
-  { date: "2026-08-26", weekday: "Wed", label: "26 Aug", score: 34, risk: "Moderate" },
-  { date: "2026-08-27", weekday: "Thu", label: "27 Aug", score: 46, risk: "High" },
-  { date: "2026-08-28", weekday: "Fri", label: "28 Aug", score: 55, risk: "High" },
-  { date: "2026-08-29", weekday: "Sat", label: "29 Aug", score: 69, risk: "Very High" },
-  { date: "2026-08-30", weekday: "Sun", label: "30 Aug", score: 87, risk: "Extreme" },
-  { date: "2026-08-31", weekday: "Mon", label: "31 Aug", score: 73, risk: "Very High" },
-  { date: "2026-09-01", weekday: "Tue", label: "Today", score: 52, risk: "High" },
+/** Simulated city-wide operational screening data; this is not a live forecast. */
+export const puneHeatTrend: HeatTrendDay[] = [
+  { date: "2026-08-25", weekday: "Tue", label: "25 Aug", score: 54, risk: "High", period: "Historical", maxTemperature: 34, minTemperature: 24, humidity: 65, windSpeed: 11, seasonalDeviation: 2, highRiskWards: 7, priorityAreas: ["Kothrud", "Yerawada", "Kondhwa"], healthImpact: "Moderate", recommendedAction: "Maintain routine heat-health surveillance and hydrate field teams." },
+  { date: "2026-08-26", weekday: "Wed", label: "26 Aug", score: 58, risk: "High", period: "Historical", maxTemperature: 35, minTemperature: 25, humidity: 66, windSpeed: 9, seasonalDeviation: 3, highRiskWards: 9, priorityAreas: ["Shivajinagar", "Hadapsar", "Dhanori"], healthImpact: "Moderate", recommendedAction: "Review water-point availability in priority wards." },
+  { date: "2026-08-27", weekday: "Thu", label: "27 Aug", score: 62, risk: "Very High", period: "Historical", maxTemperature: 36, minTemperature: 25, humidity: 68, windSpeed: 8, seasonalDeviation: 3, highRiskWards: 11, priorityAreas: ["Swargate", "Wakad", "Hadapsar"], healthImpact: "Elevated", recommendedAction: "Pre-position outreach teams at busy transit and market areas." },
+  { date: "2026-08-28", weekday: "Fri", label: "28 Aug", score: 66, risk: "Very High", period: "Historical", maxTemperature: 37, minTemperature: 26, humidity: 67, windSpeed: 7, seasonalDeviation: 4, highRiskWards: 13, priorityAreas: ["Kondhwa", "Bibwewadi", "Viman Nagar"], healthImpact: "Elevated", recommendedAction: "Extend public drinking-water checks and worker-rest messaging." },
+  { date: "2026-08-29", weekday: "Sat", label: "29 Aug", score: 69, risk: "Very High", period: "Historical", maxTemperature: 37, minTemperature: 26, humidity: 70, windSpeed: 6, seasonalDeviation: 4, highRiskWards: 14, priorityAreas: ["Swargate", "Hadapsar", "Wagholi"], healthImpact: "Elevated", recommendedAction: "Coordinate heat-health messaging with ward response teams." },
+  { date: "2026-08-30", weekday: "Sun", label: "30 Aug", score: 65, risk: "Very High", period: "Historical", maxTemperature: 36, minTemperature: 25, humidity: 69, windSpeed: 8, seasonalDeviation: 3, highRiskWards: 12, priorityAreas: ["Kothrud", "Aundh", "Yerawada"], healthImpact: "Elevated", recommendedAction: "Maintain cooling-centre readiness and monitor ambulance demand." },
+  { date: "2026-08-31", weekday: "Mon", label: "31 Aug", score: 71, risk: "Very High", period: "Historical", maxTemperature: 38, minTemperature: 26, humidity: 70, windSpeed: 6, seasonalDeviation: 5, highRiskWards: 15, priorityAreas: ["Hadapsar", "Swargate", "Wakad"], healthImpact: "Elevated", recommendedAction: "Escalate checks of cooling centres and water distribution points." },
+  { date: "2026-09-01", weekday: "Tue", label: "1 Sep", score: 74, risk: "Very High", period: "Today", maxTemperature: 39, minTemperature: 27, humidity: 69, windSpeed: 5, seasonalDeviation: 5, highRiskWards: 16, priorityAreas: ["Swargate", "Hadapsar", "Wakad"], healthImpact: "Elevated", recommendedAction: "Activate cooling centres and issue a heat-health advisory to vulnerable residents." },
+  { date: "2026-09-02", weekday: "Wed", label: "2 Sep", score: 78, risk: "Very High", period: "Forecast", maxTemperature: 40, minTemperature: 27, humidity: 70, windSpeed: 5, seasonalDeviation: 6, highRiskWards: 17, priorityAreas: ["Swargate", "Hadapsar", "Wakad"], healthImpact: "Elevated", recommendedAction: "Extend cooling-centre hours and brief ward control rooms.", forecastConfidence: "High" },
+  { date: "2026-09-03", weekday: "Thu", label: "3 Sep", score: 82, risk: "Extreme", period: "Forecast", maxTemperature: 42, minTemperature: 28, humidity: 71, windSpeed: 4, seasonalDeviation: 7, highRiskWards: 18, priorityAreas: ["Swargate", "Hadapsar", "Wakad"], healthImpact: "High", recommendedAction: "Activate cooling centres and issue heat-health advisory.", forecastConfidence: "High" },
+  { date: "2026-09-04", weekday: "Fri", label: "4 Sep", score: 85, risk: "Extreme", period: "Forecast", maxTemperature: 43, minTemperature: 28, humidity: 70, windSpeed: 4, seasonalDeviation: 8, highRiskWards: 21, priorityAreas: ["Kondhwa", "Hadapsar", "Wagholi"], healthImpact: "High", recommendedAction: "Deploy ward heat-response teams and prioritise outdoor-worker protection.", forecastConfidence: "Moderate" },
+  { date: "2026-09-05", weekday: "Sat", label: "5 Sep", score: 81, risk: "Extreme", period: "Forecast", maxTemperature: 42, minTemperature: 27, humidity: 68, windSpeed: 5, seasonalDeviation: 7, highRiskWards: 18, priorityAreas: ["Swargate", "Wakad", "Yerawada"], healthImpact: "High", recommendedAction: "Sustain outreach in high-exposure areas and review health-facility capacity.", forecastConfidence: "Moderate" },
+  { date: "2026-09-06", weekday: "Sun", label: "6 Sep", score: 76, risk: "Very High", period: "Forecast", maxTemperature: 40, minTemperature: 27, humidity: 67, windSpeed: 7, seasonalDeviation: 6, highRiskWards: 16, priorityAreas: ["Bibwewadi", "Kothrud", "Viman Nagar"], healthImpact: "Elevated", recommendedAction: "Maintain public advisories and targeted water-point checks.", forecastConfidence: "Moderate" },
+  { date: "2026-09-07", weekday: "Mon", label: "7 Sep", score: 70, risk: "Very High", period: "Forecast", maxTemperature: 38, minTemperature: 26, humidity: 65, windSpeed: 9, seasonalDeviation: 5, highRiskWards: 14, priorityAreas: ["Hadapsar", "Dhanori", "Kondhwa"], healthImpact: "Elevated", recommendedAction: "Step down surge measures only after ward-level review.", forecastConfidence: "Low" },
+  { date: "2026-09-08", weekday: "Tue", label: "8 Sep", score: 64, risk: "Very High", period: "Forecast", maxTemperature: 37, minTemperature: 26, humidity: 64, windSpeed: 10, seasonalDeviation: 4, highRiskWards: 11, priorityAreas: ["Wagholi", "Aundh", "Yerawada"], healthImpact: "Elevated", recommendedAction: "Continue routine heat surveillance and communicate risk reduction measures.", forecastConfidence: "Low" },
 ];
