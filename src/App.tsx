@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { alerts, recommendations } from "./data/mockHeatData";
 import { puneHeatTrend } from "./data/mockHeatTrend";
 import { availableRiskDates, citySummaryForDate, historicalRiskSource, recordForWard, shortDate, wardHistory } from "./data/historicalRisk";
-import { thermalMetrics } from "./data/thermalStress";
+import { prototypeHealthPrediction, thermalMetrics, type PrototypeHealthPrediction } from "./data/thermalStress";
 import { calculateForecastHealthImpact, calculateHealthImpact, calculateResponsePriority, healthImpactTrend, potentialHealthOutcomes } from "./data/healthImpact";
 import type { HistoricalWardRisk, RiskLevel } from "./types/heat";
 import { PuneHeatMap } from "./components/PuneHeatMap";
@@ -16,6 +16,7 @@ import { citizenStore, type CitizenProfile } from "./citizenAuth";
 type WardSection = "ward-overview" | "ward-risk" | "population-exposure" | "health-impact" | "ward-trends";
 type View = "overview" | "heat-map" | "heat-trend" | "wards" | WardSection | "forecast" | "alerts" | "reports" | "response" | "settings";
 type GaugeRisk = { score: number; category: RiskLevel; source: string };
+type OverviewInsight = { ward: HistoricalWardRisk; metrics: ReturnType<typeof thermalMetrics>; prediction: PrototypeHealthPrediction };
 const riskClass = (risk: RiskLevel) => `risk-${risk.toLowerCase().replaceAll(" ", "-")}`;
 const activeRisk = (risk: RiskLevel) => `${riskClass(risk)} text-[var(--risk)]`;
 
@@ -78,6 +79,78 @@ function HeatSeverityIndicator({ score, risk, source }: { score: number; risk: R
   return <section className="heat-severity-indicator" aria-label={`${source} heat severity is ${risk}; heat-risk score ${score} out of 100`}><svg viewBox="0 0 240 136" role="img" aria-hidden="true"><path d={arc(0, 100)} fill="none" stroke="#e7ebee" strokeWidth="10" />{segments.map((segment) => <path key={segment.risk} d={arc(segment.from, segment.to)} className={riskClass(segment.risk)} fill="none" stroke="var(--risk)" strokeWidth="10" />)}{[0, 35, 50, 65, 80, 100].map((tick) => { const [outerX, outerY] = point(91, tick); const [innerX, innerY] = point(86, tick); return <line key={tick} x1={outerX} y1={outerY} x2={innerX} y2={innerY} stroke="#718093" strokeOpacity=".72" strokeWidth=".8" />; })}<line x1={centerX} y1={centerY} x2={needleX} y2={needleY} stroke="#26384a" strokeWidth="1.25" strokeLinecap="round" /><circle cx={centerX} cy={centerY} r="3.5" fill="#26384a" /><circle cx={centerX} cy={centerY} r="1.15" fill="#fdfbf6" /><text x={centerX} y="92" textAnchor="middle" fill="#172536" fontSize="22" fontWeight="650">{score}</text><text x={centerX} y="105" textAnchor="middle" fill="#718093" fontSize="6.6" fontWeight="700" letterSpacing="1.15">HEAT SEVERITY</text></svg><span className={`heat-severity-status ${riskClass(risk)}`}>{risk.toUpperCase()}</span></section>;
 }
 
+function buildOverviewInsight(ward: HistoricalWardRisk): OverviewInsight {
+  const metrics = thermalMetrics(ward);
+  return { ward, metrics, prediction: prototypeHealthPrediction(metrics.htsi) };
+}
+
+function OverviewKpis({ insights }: { insights: OverviewInsight[] }) {
+  const ranked = [...insights].sort((left, right) => right.metrics.htsi - left.metrics.htsi || left.ward.wardId - right.ward.wardId);
+  const peak = ranked[0];
+  if (!peak) return null;
+  const highRiskWards = insights.filter(({ ward }) => ward.riskLevel === "High" || ward.riskLevel === "Very High" || ward.riskLevel === "Extreme").length;
+  return <section aria-label="Overview primary KPIs" className="overview-kpi-section">
+    <div className="overview-kpi-heading"><div><p className="overview-eyebrow">Decision snapshot</p><h2>What the heat is doing now</h2></div><span>Prototype / simulated prediction · next 3–5 days</span></div>
+    <div className="overview-kpi-grid">
+      <article className={`overview-kpi-card ${riskClass(peak.ward.riskLevel)}`}><p>High-Risk Wards</p><div className="overview-kpi-value"><strong>{highRiskWards}</strong><small>/ {insights.length} wards</small></div><span>Wards with High, Very High or Extreme risk bands</span></article>
+      <article className={`overview-kpi-card ${riskClass(peak.ward.riskLevel)}`}><p>Peak HTSI</p><div className="overview-kpi-value"><strong>{peak.metrics.htsi}</strong><small>/ 100</small></div><span>Ward {peak.ward.wardId} · {peak.ward.wardName}</span></article>
+      <article className={`overview-kpi-card ${riskClass(peak.ward.riskLevel)}`}><p>Predicted Hospitalization Risk</p><div className="overview-kpi-value"><strong>+{peak.prediction.hospitalizationIncrease}%</strong></div><span>vs expected baseline · peak ward · next 3–5 days</span></article>
+      <article className={`overview-kpi-card ${riskClass(peak.ward.riskLevel)}`}><p>Predicted Mortality Risk</p><div className="overview-kpi-value"><strong>+{peak.prediction.mortalityIncrease}%</strong></div><span>vs expected baseline · peak ward · next 3–5 days</span></article>
+    </div>
+  </section>;
+}
+
+function OverviewPriorityWards({ insights, selectedWardId, onWard }: { insights: OverviewInsight[]; selectedWardId: number | null; onWard: (id: number) => void }) {
+  const priority = [...insights].sort((left, right) => right.metrics.htsi - left.metrics.htsi || left.ward.wardId - right.ward.wardId).slice(0, 5);
+  return <section className="panel overview-priority-panel">
+    <div className="overview-action-header"><div><p className="overview-eyebrow">Priority areas</p><h2>Priority / High-Risk Wards</h2><span>Top five wards by current HTSI</span></div><b>SIMULATED</b></div>
+    <div className="overview-priority-list">{priority.map(({ ward, metrics }, index) => <button type="button" key={ward.wardId} aria-pressed={selectedWardId === ward.wardId} onClick={() => onWard(ward.wardId)} className={`overview-priority-row ${selectedWardId === ward.wardId ? "is-selected" : ""}`}><span className="overview-priority-rank">{String(index + 1).padStart(2, "0")}</span><span className="overview-priority-copy"><b>Ward {ward.wardId} · {ward.wardName}</b><span>HTSI <strong className={activeRisk(ward.riskLevel)}>{metrics.htsi}</strong> · WBGT {metrics.wbgt.toFixed(1)}°C</span></span><RiskTag risk={ward.riskLevel} /></button>)}</div>
+  </section>;
+}
+
+function OverviewRecommendedActions() {
+  const actionWindow = (text: string) => text.includes("48") ? "48 hours" : text.includes("12 PM") ? "12–4 PM" : "Next 3–5 days";
+  return <section className="panel overview-action-panel">
+    <div className="overview-action-header"><div><p className="overview-eyebrow">Municipal readiness</p><h2>Recommended Actions</h2><span>Prototype / simulated actions · planning guidance only</span></div><b>SIMULATED</b></div>
+    <div className="overview-action-list">{recommendations.map((action) => <article className={`overview-action-card ${action.priority === "Readiness" ? "is-readiness" : "is-priority"}`} key={action.title}><div className="overview-action-card-meta"><span className="overview-priority-badge">{action.priority}</span><span>{actionWindow(action.text)}</span></div><h3>{action.title}</h3><p>{action.text}</p><div className="overview-action-card-footer"><span><b>Affected wards</b>{action.wards}</span><span><b>Action</b>{action.action}</span></div></article>)}</div>
+  </section>;
+}
+
+function OverviewActiveAlerts() {
+  const alertRisk = (title: string) => title.toLowerCase().includes("extreme") ? "Extreme" : "High";
+  return <section className="panel overview-action-panel overview-alert-panel">
+    <div className="overview-action-header"><div><p className="overview-eyebrow">Municipal warnings</p><h2>Active Alerts</h2><span>Existing simulated alerts · no external messages are sent</span></div><b>SIMULATED</b></div>
+    <div className="overview-alert-list">{alerts.map((alert, index) => <article className={`overview-alert-card ${index === 0 ? "is-urgent" : "is-advisory"}`} key={alert.title}><div className="overview-action-card-meta"><RiskTag risk={alertRisk(alert.title)} /><span className="overview-alert-status">{alert.status}</span></div><h3>{alert.title}</h3><dl><div><dt>Affected wards</dt><dd>{alert.wards}</dd></div><div><dt>Timing</dt><dd>{alert.time}</dd></div></dl></article>)}</div>
+  </section>;
+}
+
+function OverviewSelectedWard({ insight }: { insight: OverviewInsight }) {
+  const { ward, metrics, prediction } = insight;
+  return <section className="panel overview-selected-ward">
+    <div className="overview-ward-heading"><div><p className="overview-eyebrow">Selected ward</p><h2>Ward {ward.wardId} · {ward.wardName}</h2></div><RiskTag risk={ward.riskLevel} /></div>
+    <div className="overview-ward-htsi"><div><p>Human Thermal Stress Index</p><div className="overview-htsi-value"><strong className={activeRisk(ward.riskLevel)}>{metrics.htsi}</strong><span>/ 100</span></div></div><div className="overview-htsi-risk"><span>Ward risk level</span><b className={activeRisk(ward.riskLevel)}>{ward.riskLevel}</b></div></div>
+    <div className="overview-prediction-block"><div className="overview-section-label"><p>Expected health signal</p><span>Prototype / simulated prediction · next 3–5 days</span></div><dl><div><dt>Predicted hospitalization risk</dt><dd className={activeRisk(ward.riskLevel)}>+{prediction.hospitalizationIncrease}%</dd><small>vs expected baseline</small></div><div><dt>Predicted mortality risk</dt><dd className={activeRisk(ward.riskLevel)}>+{prediction.mortalityIncrease}%</dd><small>vs expected baseline</small></div></dl></div>
+    <div className="overview-section-label overview-supporting-label"><p>Supporting scientific metrics</p><span>Ward-day values</span></div>
+    <dl className="overview-science-grid"><div><dt>Temperature</dt><dd>{ward.temperature.toFixed(1)}°C</dd></div><div><dt>Humidity</dt><dd>{ward.humidity}%</dd></div><div><dt>Wind</dt><dd>{ward.windSpeed.toFixed(1)} km/h</dd></div><div><dt>WBGT</dt><dd>{metrics.wbgt.toFixed(1)}°C</dd></div><div><dt>UTCI</dt><dd>{metrics.utci.toFixed(1)}°C</dd></div></dl>
+    <p className="overview-estimate-note">WBGT and UTCI are derived screening estimates; use them as supporting context, not instrument readings.</p>
+  </section>;
+}
+
+function OverviewDecisionWorkspace({ date, selectedWardId, onWard }: Pick<WorkspaceProps, "date" | "selectedWardId" | "onWard">) {
+  const summary = useMemo(() => citySummaryForDate(date), [date]);
+  const insights = useMemo(() => summary.rows.map(buildOverviewInsight), [summary.rows]);
+  const selected = insights.find(({ ward }) => ward.wardId === selectedWardId) ?? insights[0];
+  if (!selected) return null;
+  return <>
+    <OverviewKpis insights={insights} />
+    <section className="overview-decision-grid">
+      <section className="panel overview-map-panel"><div className="overview-map-header"><div><p className="overview-eyebrow">Where is it happening?</p><h2>Pune ward human heat risk</h2><span>HTSI values · existing five-level ward risk bands</span></div><b>SIMULATED</b></div><div className="overview-map-canvas"><PuneHeatMap wards={summary.rows} selected={selected.ward} onSelect={(ward) => onWard(ward.wardId)} riskMetric="htsi" /></div><p className="overview-map-note">HTSI remains the primary human thermal-stress value; shading preserves the existing five-level ward risk variation. Select a ward to see its health signal and supporting metrics.</p></section>
+      <aside className="overview-side-column"><OverviewPriorityWards insights={insights} selectedWardId={selectedWardId} onWard={onWard} /><OverviewSelectedWard insight={selected} /></aside>
+    </section>
+    <section className="overview-action-grid"><OverviewRecommendedActions /><OverviewActiveAlerts /></section>
+  </>;
+}
+
 function WardDetails({ ward }: { ward: HistoricalWardRisk }) { const metrics = thermalMetrics(ward); return <div className="panel p-3.5"><div className="flex items-start justify-between gap-2"><div><p className="text-[9px] font-medium uppercase tracking-[.1em] text-[#8a97a6]">Selected ward</p><h2 className="mt-0.5 text-[15px] font-semibold tracking-[-.02em]">Ward {ward.wardId} · {ward.wardName}</h2></div><RiskTag risk={ward.riskLevel} /></div><div className="mt-3 grid grid-cols-3 divide-x divide-[#eef1f4] border-y border-[#eef1f4] py-2 text-center"><div><b className="block text-[13px] font-semibold">{ward.temperature}°C</b><span className="text-[10px] text-[#5b6b7c]">Temperature</span></div><div><b className="block text-[13px] font-semibold">{ward.humidity}%</b><span className="text-[10px] text-[#5b6b7c]">Humidity</span></div><div><b className="block text-[13px] font-semibold">{ward.windSpeed}</b><span className="text-[10px] text-[#5b6b7c]">km/h wind</span></div></div><dl className="mt-2.5 space-y-1.5 text-[12px]"><div className="flex justify-between"><dt className="text-[#5b6b7c]">Human Thermal Stress Index</dt><dd className={`font-semibold ${activeRisk(metrics.thermalStress)}`}>{metrics.htsi} / 100</dd></div><div className="flex justify-between"><dt className="text-[#5b6b7c]">Screening WBGT</dt><dd className="font-semibold">{metrics.wbgt.toFixed(1)}°C</dd></div><div className="flex justify-between"><dt className="text-[#5b6b7c]">Thermal stress</dt><dd><RiskTag risk={metrics.thermalStress} /></dd></div><div className="flex justify-between"><dt className="text-[#5b6b7c]">Thermal risk score</dt><dd className="font-semibold">{ward.thermalRisk} / 100</dd></div></dl></div>; }
 
 type WorkspaceProps = { date: string; selectedWardId: number | null; onDate: (date: string) => void; onWard: (id: number | null) => void; compact?: boolean };
@@ -93,7 +166,7 @@ function MapWorkspace({ date, selectedWardId, onDate, onWard, compact = false }:
   </>;
 }
 
-function OverviewPage({ gauge, ...props }: WorkspaceProps & { gauge: GaugeRisk }) { return <main className="p-4"><section className="overview-header"><PageIntro kicker="Municipal heat command" title="Pune heat-health operations" detail="Ward risk, response readiness and historical weather screening." /><div className="overview-gauge"><HeatSeverityIndicator score={gauge.score} risk={gauge.category} source={gauge.source} /></div></section><MapWorkspace {...props} compact /><section className="mt-3 grid grid-cols-[1.2fr_1fr] gap-3"><div className="panel p-3.5"><h2 className="text-[13px] font-semibold">Recommended actions</h2><div className="mt-2 grid grid-cols-2 gap-2">{recommendations.slice(0, 4).map((action) => <article className="border border-[#eef1f4] p-3" key={action.title}><p className="text-[9px] font-semibold uppercase tracking-[.08em] text-[#607080]">{action.priority}</p><h3 className="mt-1 text-[12px] font-semibold">{action.title}</h3><p className="mt-1 text-[10px] leading-4 text-[#5b6b7c]">{action.text}</p></article>)}</div></div><div className="panel p-3.5"><h2 className="text-[13px] font-semibold">Active alerts</h2><div className="mt-2 divide-y divide-[#eef1f4]">{alerts.map((alert) => <article className="py-2" key={alert.title}><h3 className="text-[12px] font-semibold">{alert.title}</h3><p className="mt-1 text-[10px] text-[#5b6b7c]">{alert.wards} · {alert.time}</p></article>)}</div></div></section></main>; }
+function OverviewPage(props: WorkspaceProps) { return <main className="overview-page p-4"><section className="overview-decision-header"><PageIntro kicker="Municipal heat command" title="Pune heat-health operations" detail="Ward risk, response readiness and historical weather screening." /><div className="overview-decision-note"><b>HTSI command view</b><p>HTSI is the primary human thermal-stress signal for this Overview.</p></div></section><OverviewDecisionWorkspace date={props.date} selectedWardId={props.selectedWardId} onWard={props.onWard} /></main>; }
 
 function WardRiskTrend({ wardId }: { wardId: number }) {
   const history = wardHistory(wardId).slice(-14);
@@ -360,7 +433,7 @@ function App() {
   else if (view === "response") content = <ResponsePage date={date} selectedWardId={selectedWardId} onWard={setSelectedWardId} />;
   else if (view === "reports") content = <ReportsPage date={date} reportWardId={reportWardId} onReportWard={setReportWardId} />;
   else if (view === "settings") content = <SettingsPage />;
-  else content = <OverviewPage {...workspace} gauge={gaugeRisk} />;
+  else content = <OverviewPage {...workspace} />;
   const signOut = () => { authStore.signOut(); setAdministrator(null); setAccess("citizen"); };
   return <><Sidebar view={view} onNavigate={setView} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} /><div className={`app-content ${collapsed ? "sidebar-collapsed" : ""}`}><Header date={date} view={view} administrator={administrator} onSignOut={signOut} />{view !== "overview" && view !== "forecast" && <div className="context-gauge"><HeatSeverityIndicator score={gaugeRisk.score} risk={gaugeRisk.category} source={gaugeRisk.source} /></div>}<div className="contextual-page">{content}</div></div></>;
 }
