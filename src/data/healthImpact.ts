@@ -1,5 +1,5 @@
 import type { HeatTrendDay, HistoricalWardRisk, RiskLevel } from "../types/heat";
-import { thermalMetrics, thermalStressLevel } from "./thermalStress";
+import { htsiRiskLevel, thermalMetrics } from "./thermalStress";
 
 export type Availability = "MODEL ESTIMATE" | "DATA UNAVAILABLE";
 export type HealthImpact = {
@@ -27,7 +27,7 @@ export const potentialHealthOutcomes: HealthOutcome[] = [
 
 /** Existing operational risk is the only available ward exposure calibration. */
 export function calculateExposure(row: Pick<HistoricalWardRisk, "thermalRisk" | "riskLevel">) {
-  return { score: row.thermalRisk, level: thermalStressLevel(row.thermalRisk), availability: "MODEL ESTIMATE" as const };
+  return { score: row.thermalRisk, level: row.riskLevel, availability: "MODEL ESTIMATE" as const };
 }
 
 /** No ward-level demographic vulnerability dataset has been loaded into SAAYA. */
@@ -35,16 +35,16 @@ export function calculateVulnerability() {
   return { level: "Data unavailable" as const, availability: "DATA UNAVAILABLE" as const };
 }
 
-function healthImpactFromScores(htsi: number, exposureScore: number) {
-  // No demographic vulnerability score is applied until an official ward dataset is loaded.
-  return thermalStressLevel(Math.round(htsi * .65 + exposureScore * .35));
+function healthImpactFromScores(htsi: number) {
+  // HTSI is the single risk-band source; exposure remains a supporting indicator.
+  return htsiRiskLevel(htsi);
 }
 
 export function calculateHealthImpact(row: HistoricalWardRisk): HealthImpact {
   const thermal = thermalMetrics(row);
   const exposure = calculateExposure(row);
   // This intentionally does not invent demographic or clinical observations.
-  const potentialImpact = healthImpactFromScores(thermal.htsi, exposure.score);
+  const potentialImpact = healthImpactFromScores(thermal.htsi);
   const priorityPopulation = exposure.level === "High" || exposure.level === "Very High" || exposure.level === "Extreme" ? "People with prolonged outdoor exposure" : "Older residents and people with limited cooling access";
   return {
     thermalStress: thermal.thermalStress,
@@ -55,18 +55,18 @@ export function calculateHealthImpact(row: HistoricalWardRisk): HealthImpact {
     mortalityRisk: potentialImpact,
     responsePriority: potentialImpact,
     priorityPopulation,
-    explanation: `${thermal.thermalStress} thermal stress combined with ${exposure.level.toLowerCase()} operational exposure indicates ${potentialImpact.toLowerCase()} potential health impact. Demographic vulnerability data is not yet available.`,
+    explanation: `${thermal.thermalStress} HTSI indicates ${potentialImpact.toLowerCase()} modeled potential health impact; ${exposure.level.toLowerCase()} operational exposure is a supporting indicator. Demographic vulnerability data is not yet available.`,
     availability: "MODEL ESTIMATE",
   };
 }
 
 /** Forecasts do not include demographic or clinical data.  Their existing thermal score is the only forecast thermal input. */
-export function calculateForecastHealthImpact(day: HeatTrendDay, exposureScore = day.score) {
-  const potentialImpact = healthImpactFromScores(day.score, exposureScore);
+export function calculateForecastHealthImpact(day: HeatTrendDay) {
+  const potentialImpact = healthImpactFromScores(day.score);
   return {
-    thermalStress: thermalStressLevel(day.score),
+    thermalStress: htsiRiskLevel(day.score),
     htsi: day.score,
-    exposure: thermalStressLevel(exposureScore),
+    exposure: htsiRiskLevel(day.score),
     vulnerability: calculateVulnerability().level,
     potentialImpact,
     mortalityRisk: potentialImpact,

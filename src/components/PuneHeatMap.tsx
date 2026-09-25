@@ -9,10 +9,18 @@ type WardProps = { wardnum: number; Name1?: string; Name2?: string };
 type WardFeature = GeoJSON.Feature<GeoJSON.Geometry, WardProps>;
 type WardCollection = GeoJSON.FeatureCollection<GeoJSON.Geometry, WardProps>;
 const levels: RiskLevel[] = ["Low", "Moderate", "High", "Very High", "Extreme"];
-const colors: Record<RiskLevel, string> = { Low: "#257451", Moderate: "#b67a13", High: "#ca5a1d", "Very High": "#b73335", Extreme: "#68233f" };
+export const heatMapRiskColors: Record<RiskLevel, string> = { Low: "#257451", Moderate: "#b67a13", High: "#ca5a1d", "Very High": "#b73335", Extreme: "#68233f" };
 
 export type MapMetric = "operational" | "htsi" | "temperature" | "exposure" | "health";
 type Props = { wards: readonly HistoricalWardRisk[]; selected: HistoricalWardRisk; onSelect: (ward: HistoricalWardRisk) => void; riskMetric?: MapMetric; initialFocusOffsetY?: number };
+
+export function heatMapRiskLevel(ward: HistoricalWardRisk, metric: MapMetric, health?: ReturnType<typeof calculateHealthImpact>): RiskLevel {
+  if (metric === "temperature") return ward.temperature >= 40 ? "Extreme" : ward.temperature >= 38 ? "Very High" : ward.temperature >= 36 ? "High" : ward.temperature >= 33 ? "Moderate" : "Low";
+  if (metric === "exposure") return (health ?? calculateHealthImpact(ward)).exposure;
+  if (metric === "health") return (health ?? calculateHealthImpact(ward)).potentialImpact;
+  if (metric === "htsi") return thermalMetrics(ward).htsiRisk;
+  return ward.riskLevel;
+}
 
 export function PuneHeatMap({ wards, selected, onSelect, riskMetric = "operational", initialFocusOffsetY = 0 }: Props) {
   const container = useRef<HTMLDivElement>(null);
@@ -35,17 +43,17 @@ export function PuneHeatMap({ wards, selected, onSelect, riskMetric = "operation
       const byId = new Map(wards.map((ward) => {
         const htsi = thermalMetrics(ward).htsi;
         const health = calculateHealthImpact(ward);
-        const risk: RiskLevel = riskMetric === "temperature" ? (ward.temperature >= 40 ? "Extreme" : ward.temperature >= 38 ? "Very High" : ward.temperature >= 36 ? "High" : ward.temperature >= 33 ? "Moderate" : "Low") : riskMetric === "exposure" ? health.exposure : riskMetric === "health" ? health.potentialImpact : ward.riskLevel;
+        const risk = heatMapRiskLevel(ward, riskMetric, health);
         return [ward.wardId, { ward, risk, htsi, health }] as const;
       }));
-      const style = (risk?: RiskLevel): L.PathOptions => ({ color: "#f8fafc", weight: 0.8, opacity: .8, fillColor: risk ? colors[risk] : "#94a3b8", fillOpacity: .68, lineJoin: "round" });
+      const style = (risk?: RiskLevel): L.PathOptions => ({ color: "#f8fafc", weight: 0.8, opacity: .8, fillColor: risk ? heatMapRiskColors[risk] : "#94a3b8", fillOpacity: .68, lineJoin: "round" });
       L.geoJSON(geojson, {
         style: (feature) => style(byId.get((feature as WardFeature).properties.wardnum)?.risk),
         onEachFeature: (feature, layer) => {
           const entry = byId.get((feature as WardFeature).properties.wardnum);
           if (!entry) return;
           const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
-          const detail = `<span>HTSI ${entry.htsi}/100 · ${entry.ward.riskLevel} risk</span><br/><span>Temperature ${entry.ward.temperature.toFixed(1)}°C · ${escapeHtml(entry.health.exposure)} exposure</span>`;
+          const detail = `<span>HTSI ${entry.htsi}/100 · ${entry.risk} risk</span><br/><span>Temperature ${entry.ward.temperature.toFixed(1)}°C · ${escapeHtml(entry.health.exposure)} exposure</span>`;
           layer.bindTooltip(`<strong>Ward ${entry.ward.wardId} · ${escapeHtml(entry.ward.wardName)}</strong><br/>${detail}`, { sticky: true, opacity: .96 });
           layer.on("click", () => onSelectRef.current(entry.ward));
           layer.on("mouseover", () => (layer as L.Path).setStyle({ fillOpacity: .84, weight: 1.5 }));
@@ -68,7 +76,7 @@ function addLegend(map: L.Map, metric: MapMetric) {
   legend.onAdd = () => {
     const wrap = L.DomUtil.create("div", "saaya-map-legend");
     const label = metric === "temperature" ? "Temperature bands" : metric === "exposure" ? "Exposure bands" : metric === "health" ? "Potential health impact" : "HTSI / ward risk bands";
-    wrap.innerHTML = `<p>${label}</p>${levels.map((risk) => `<span><i style="background:${colors[risk]}"></i>${risk}</span>`).join("")}`;
+    wrap.innerHTML = `<p>${label}</p>${levels.map((risk) => `<span><i style="background:${heatMapRiskColors[risk]}"></i>${risk}</span>`).join("")}`;
     L.DomEvent.disableClickPropagation(wrap);
     return wrap;
   };

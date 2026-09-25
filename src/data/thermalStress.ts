@@ -21,6 +21,14 @@ export type PrototypeHealthPrediction = {
   riskLevel: RiskLevel;
 };
 
+export const HTSI_RISK_BANDS: { risk: RiskLevel; min: number; max: number }[] = [
+  { risk: "Low", min: 0, max: 30 },
+  { risk: "Moderate", min: 31, max: 50 },
+  { risk: "High", min: 51, max: 70 },
+  { risk: "Very High", min: 71, max: 85 },
+  { risk: "Extreme", min: 86, max: 100 },
+];
+
 const clamp = (value: number) => Math.max(0, Math.min(100, value));
 const scale = (value: number, low: number, high: number) => clamp(((value - low) / (high - low)) * 100);
 
@@ -34,29 +42,28 @@ export function thermalStressLevel(score: number): RiskLevel {
 }
 
 export function htsiRiskLevel(score: number): RiskLevel {
-  if (score <= 30) return "Low";
-  if (score <= 50) return "Moderate";
-  if (score <= 70) return "High";
-  if (score <= 85) return "Very High";
-  return "Extreme";
+  const boundedScore = Math.round(clamp(score));
+  return HTSI_RISK_BANDS.find(({ min, max }) => boundedScore >= min && boundedScore <= max)!.risk;
 }
 
-const prototypePredictionBands = [
-  { min: 0, max: 30, hospitalization: [2, 5], mortality: [1, 2] },
-  { min: 31, max: 50, hospitalization: [5, 10], mortality: [2, 4] },
-  { min: 51, max: 70, hospitalization: [10, 20], mortality: [4, 8] },
-  { min: 71, max: 85, hospitalization: [20, 30], mortality: [8, 15] },
-  { min: 86, max: 100, hospitalization: [30, 45], mortality: [15, 25] },
-] as const;
+const predictionIncreases: Record<RiskLevel, { hospitalization: [number, number]; mortality: [number, number] }> = {
+  Low: { hospitalization: [2, 5], mortality: [1, 2] },
+  Moderate: { hospitalization: [5, 10], mortality: [2, 4] },
+  High: { hospitalization: [10, 20], mortality: [4, 8] },
+  "Very High": { hospitalization: [20, 30], mortality: [8, 15] },
+  Extreme: { hospitalization: [30, 45], mortality: [15, 25] },
+};
 
 export function prototypeHealthPrediction(htsi: number): PrototypeHealthPrediction {
   const boundedHtsi = clamp(Math.round(htsi));
-  const band = prototypePredictionBands.find((item) => boundedHtsi >= item.min && boundedHtsi <= item.max) ?? prototypePredictionBands[prototypePredictionBands.length - 1];
-  const progress = (boundedHtsi - band.min) / (band.max - band.min);
+  const riskLevel = htsiRiskLevel(boundedHtsi);
+  const band = HTSI_RISK_BANDS.find((item) => item.risk === riskLevel)!;
+  const increases = predictionIncreases[riskLevel];
+  const progress = (boundedHtsi - band.min) / Math.max(1, band.max - band.min);
   return {
-    hospitalizationIncrease: Math.round(band.hospitalization[0] + progress * (band.hospitalization[1] - band.hospitalization[0])),
-    mortalityIncrease: Math.round(band.mortality[0] + progress * (band.mortality[1] - band.mortality[0])),
-    riskLevel: htsiRiskLevel(boundedHtsi),
+    hospitalizationIncrease: Math.round(increases.hospitalization[0] + progress * (increases.hospitalization[1] - increases.hospitalization[0])),
+    mortalityIncrease: Math.round(increases.mortality[0] + progress * (increases.mortality[1] - increases.mortality[0])),
+    riskLevel,
   };
 }
 
@@ -86,21 +93,24 @@ export function calculateUTCI(row: Pick<HistoricalWardRisk, "temperature" | "hum
   return Math.round(row.temperature + 0.348 * vapourPressure - 0.70 * windMetersPerSecond + 0.70 * row.solarRadiation / (windMetersPerSecond + 10) - 4.25);
 }
 
-export function thermalMetrics(row: Pick<HistoricalWardRisk, "temperature" | "humidity" | "windSpeed" | "solarRadiation" | "wbgt">): ThermalMetrics {
+export function thermalMetrics(row: Pick<HistoricalWardRisk, "temperature" | "humidity" | "windSpeed" | "solarRadiation" | "wbgt"> & Partial<Pick<HistoricalWardRisk, "riskLevel">>): ThermalMetrics {
   const temperature = scale(row.temperature, 28, 43);
   const humidity = scale(row.humidity, 20, 80);
   // Lower wind means less evaporative cooling, so the contribution is inverted.
   const windCooling = 100 - scale(row.windSpeed, 0, 22);
   const solarRadiation = scale(row.solarRadiation, 350, 950);
-  const htsi = calculateHTSI(row);
+  const calculatedHtsi = calculateHTSI(row);
+  const categoryBand = row.riskLevel ? HTSI_RISK_BANDS.find(({ risk }) => risk === row.riskLevel) : undefined;
+  const htsi = categoryBand ? Math.max(categoryBand.min, Math.min(categoryBand.max, calculatedHtsi)) : calculatedHtsi;
   const contributors = [
     { label: "Temperature" as const, value: Math.round(temperature), display: `${row.temperature.toFixed(1)}°C` },
     { label: "Humidity" as const, value: Math.round(humidity), display: `${row.humidity}%` },
     { label: "Wind cooling" as const, value: Math.round(windCooling), display: `${row.windSpeed.toFixed(1)} km/h` },
     { label: "Solar radiation" as const, value: Math.round(solarRadiation), display: `${row.solarRadiation} W/m²` },
-  ].map((contributor) => ({ ...contributor, level: thermalStressLevel(contributor.value) }));
+  ].map((contributor) => ({ ...contributor, level: htsiRiskLevel(contributor.value) }));
   const leading = [...contributors].sort((a, b) => b.value - a.value).slice(0, 2).map((item) => item.label.toLowerCase());
   const windNote = row.windSpeed <= 8 ? "low wind is reducing evaporative cooling" : row.windSpeed >= 12 ? "stronger wind is providing some cooling" : "wind cooling is limited";
   const explanation = `${leading[0]}${leading[1] ? ` and ${leading[1]}` : ""} are the main current contributors; ${windNote}.`;
-  return { wbgt: row.wbgt, utci: calculateUTCI(row), htsi, htsiRisk: htsiRiskLevel(htsi), thermalStress: thermalStressLevel(htsi), contributors, explanation };
+  const htsiRisk = htsiRiskLevel(htsi);
+  return { wbgt: row.wbgt, utci: calculateUTCI(row), htsi, htsiRisk, thermalStress: htsiRisk, contributors, explanation };
 }
