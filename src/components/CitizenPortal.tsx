@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, type FormEvent } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { citySummaryForDate, recordForWard } from "../data/historicalRisk";
+import { availableRiskDates, citySummaryForDate, recordForWard } from "../data/historicalRisk";
 import { puneHeatTrend } from "../data/mockHeatTrend";
 import { heatLocalities } from "../data/mockHeatLocalities";
 import { thermalMetrics } from "../data/thermalStress";
@@ -12,7 +12,7 @@ type View = "home" | "risk" | "map" | "forecast" | "centres" | "navigation" | "a
 type Props = { profile: CitizenProfile; onProfile: (profile: CitizenProfile) => void; onSignOut: () => void };
 const views: View[] = ["home", "risk", "map", "forecast", "centres", "navigation", "alerts", "hydration", "solar", "report", "profile"];
 const riskClass = (risk: RiskLevel) => `risk-${risk.toLowerCase().replaceAll(" ", "-")}`;
-const today = "2026-09-01";
+const today = availableRiskDates.at(-1) ?? "2026-05-31";
 const centres = [{ name: "PMC cooling support point · Shivajinagar", address: "Shivajinagar, Pune", latitude: 18.5304, longitude: 73.8493 }, { name: "PMC cooling support point · Hadapsar", address: "Hadapsar, Pune", latitude: 18.5089, longitude: 73.9259 }, { name: "PMC cooling support point · Kothrud", address: "Kothrud, Pune", latitude: 18.5074, longitude: 73.8077 }];
 
 function Icon({ name }: { name: string }) { const icons: Record<string, string> = { home: "M3 11l9-8 9 8v10h-6v-6H9v6H3z", heat: "M12 2c3 4 6 6 6 11a6 6 0 1 1-12 0c0-5 3-7 6-11z", map: "m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15m6-12v15", chart: "M3 3v18h18M7 16l4-5 3 2 5-7", pin: "M12 22s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", route: "M6 3h4v4H6zM14 17h4v4h-4zM8 7c0 6 8 2 8 10", bell: "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9", water: "M12 2s6 6.1 6 11a6 6 0 1 1-12 0c0-4.9 6-11 6-11z", sun: "M12 3v2m0 14v2m9-9h-2M5 12H3m15.4-6.4-1.4 1.4M7 17l-1.4 1.4m12.8 0L17 17M7 7 5.6 5.6M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z", report: "M6 3h9l3 3v15H6zM9 12h6m-6 4h6", user: "M20 21a8 8 0 0 0-16 0M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8", menu: "M4 7h16M4 12h16M4 17h16", phone: "M7.5 3.5 5.1 5.2c-.75.54-.98 1.54-.54 2.35 2.5 4.61 6.29 8.4 10.9 10.9.81.44 1.81.21 2.35-.54l1.69-2.4a1.75 1.75 0 0 0-.35-2.36l-2.25-1.76a1.75 1.75 0 0 0-2.34.1l-1.34 1.3a12.9 12.9 0 0 1-2.01-2.01l1.3-1.34a1.75 1.75 0 0 0 .1-2.34L9.86 3.85a1.75 1.75 0 0 0-2.36-.35Z" }; return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={icons[name]} /></svg>; }
