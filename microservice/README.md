@@ -9,7 +9,7 @@ Run the backend API and frontend in separate PowerShell terminals. In the comman
 **Terminal 1 — backend API**
 
 ```powershell
-cd C:\Shanay\SIH26\saaaya\microservice
+
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -21,7 +21,7 @@ uvicorn main:app --reload --port 8000
 **Terminal 2 — frontend**
 
 ```powershell
-cd C:\Shanay\SIH26\saaaya\frontend
+
 npm install
 npm run dev
 ```
