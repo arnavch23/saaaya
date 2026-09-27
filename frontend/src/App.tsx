@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { alerts, recommendations } from "./data/mockHeatData";
 import { puneHeatTrend } from "./data/mockHeatTrend";
@@ -21,6 +21,8 @@ type OverviewInsight = { ward: HistoricalWardRisk; metrics: ReturnType<typeof th
 type SearchItem = { title: string; detail: string; group: "Wards" | "Alerts" | "Reports" | "Sections & concepts"; view: View; wardId?: number; keywords?: string };
 const riskClass = (risk: RiskLevel) => `risk-${risk.toLowerCase().replaceAll(" ", "-")}`;
 const activeRisk = (risk: RiskLevel) => `${riskClass(risk)} text-[var(--risk)]`;
+type LiveSurge = { date: string; wardId: number; value: number };
+const LiveSurgeContext = createContext<LiveSurge | null>(null);
 function getHTSIBand(htsi: number): RiskLevel { return htsiRiskLevel(htsi); }
 function getRelevantHealthEffects(htsi: number): [string, string][] {
   const band = getHTSIBand(htsi);
@@ -80,7 +82,7 @@ function buildOverviewInsight(ward: HistoricalWardRisk): OverviewInsight {
   return { ward, metrics, prediction: prototypeHealthPrediction(metrics.htsi) };
 }
 
-function OverviewKpis({ insights }: { insights: OverviewInsight[] }) {
+function OverviewKpis({ insights, liveSurgeValue }: { insights: OverviewInsight[]; liveSurgeValue?: number }) {
   const ranked = [...insights].sort((left, right) => right.metrics.htsi - left.metrics.htsi || left.ward.wardId - right.ward.wardId);
   const peak = ranked[0];
   if (!peak) return null;
@@ -90,7 +92,7 @@ function OverviewKpis({ insights }: { insights: OverviewInsight[] }) {
     <div className="overview-kpi-grid">
       <article className={`overview-kpi-card ${riskClass(peak.ward.riskLevel)}`}><p>High-Risk Wards</p><div className="overview-kpi-value"><strong>{highRiskWards}</strong><small>/ {insights.length} wards</small></div><span>Wards with High, Very High or Extreme risk bands</span></article>
       <article className={`overview-kpi-card ${riskClass(peak.metrics.htsiRisk)}`}><p>Peak HTSI</p><div className="overview-kpi-value"><strong>{peak.metrics.htsi}</strong><small>/ 100 · {peak.metrics.htsiRisk}</small></div><span>Ward {peak.ward.wardId} · {peak.ward.wardName}</span></article>
-      <article className={`overview-kpi-card ${riskClass(peak.ward.riskLevel)}`}><p>Predicted Hospitalization Risk</p><div className="overview-kpi-value"><strong>+{peak.prediction.hospitalizationIncrease}%</strong></div><span>vs expected baseline · peak ward · next 3–5 days</span></article>
+      <article className={`overview-kpi-card ${riskClass(peak.ward.riskLevel)}`}><p>Predicted Hospitalization Risk</p><div className="overview-kpi-value"><strong>+{liveSurgeValue ?? peak.prediction.hospitalizationIncrease}%</strong></div><span>vs expected baseline · peak ward · next 3–5 days</span></article>
       <article className={`overview-kpi-card ${riskClass(peak.ward.riskLevel)}`}><p>Predicted Mortality Risk</p><div className="overview-kpi-value"><strong>+{peak.prediction.mortalityIncrease}%</strong></div><span>vs expected baseline · peak ward · next 3–5 days</span></article>
     </div>
   </section>;
@@ -162,7 +164,7 @@ function MapWorkspace({ date, selectedWardId, onDate, onWard, compact = false, c
   </>;
 }
 
-function OverviewPage(props: WorkspaceProps & { onNavigate: (view: View) => void; onExplainRisk: (prompt: string) => void }) { const insights = useMemo(() => citySummaryForDate(props.date).rows.map(buildOverviewInsight), [props.date]); return <main className="overview-page p-4"><section className="overview-decision-header"><PageIntro kicker="DETECT · MUNICIPAL OPERATIONS" title="Pune heat-health operations" detail={`Prototype model · 58 wards · Historical reference ${shortDate(props.date)}`} /></section><OverviewKpis insights={insights} /><OverviewDecisionWorkspace date={props.date} selectedWardId={props.selectedWardId} onWard={props.onWard} onNavigate={props.onNavigate} onExplainRisk={props.onExplainRisk} /></main>; }
+function OverviewPage(props: WorkspaceProps & { onNavigate: (view: View) => void; onExplainRisk: (prompt: string) => void }) { const liveSurge = useContext(LiveSurgeContext); const insights = useMemo(() => citySummaryForDate(props.date).rows.map(buildOverviewInsight), [props.date]); const liveSurgeValue = liveSurge?.date === props.date && liveSurge.wardId === props.selectedWardId ? Math.round(liveSurge.value) : undefined; return <main className="overview-page p-4"><section className="overview-decision-header"><PageIntro kicker="DETECT · MUNICIPAL OPERATIONS" title="Pune heat-health operations" detail={`Prototype model · 58 wards · Historical reference ${shortDate(props.date)}`} /></section><OverviewKpis insights={insights} liveSurgeValue={liveSurgeValue} /><OverviewDecisionWorkspace date={props.date} selectedWardId={props.selectedWardId} onWard={props.onWard} onNavigate={props.onNavigate} onExplainRisk={props.onExplainRisk} /></main>; }
 
 function WardRiskTrend({ wardId }: { wardId: number }) {
   const history = wardHistory(wardId).slice(-14);
@@ -243,9 +245,11 @@ function PopulationExposurePage({ ward }: { ward: HistoricalWardRisk }) { const 
 
 function WardTrendsPage({ ward, onCityTrend }: { ward: HistoricalWardRisk; onCityTrend: () => void }) { const history = wardHistory(ward.wardId).slice(-14); const changes = history.filter((row, index) => index === 0 || row.riskLevel !== history[index - 1].riskLevel); return <section className="ward-trends-content"><div className="flex flex-wrap items-center justify-between gap-2"><p className="section-kicker">WARD HISTORY · {history[0] ? shortDate(history[0].date) : ""} – {history.at(-1) ? shortDate(history.at(-1)!.date) : ""}</p><button type="button" onClick={onCityTrend} className="text-[10px] font-semibold text-[#385e7b] underline underline-offset-2">Open city trend analysis</button></div><div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_330px]"><WardRiskTrend wardId={ward.wardId} /><aside className="panel p-3.5"><h3 className="text-[13px] font-semibold">Risk-category changes</h3><p className="mt-1 text-[10px] text-[#5b6b7c]">{history.length} recorded periods</p><div className="mt-3 space-y-2">{changes.map((row) => <div className="flex items-center justify-between text-[11px]" key={row.date}><span>{shortDate(row.date)} · {row.thermalRisk}</span><RiskTag risk={row.riskLevel} /></div>)}</div></aside></div></section>; }
 
-function HealthImpactPage({ ward }: { ward: HistoricalWardRisk; date: string; onWard: (id: number) => void }) {
+function HealthImpactPage({ ward, date }: { ward: HistoricalWardRisk; date: string; onWard: (id: number) => void }) {
+  const liveSurge = useContext(LiveSurgeContext);
   const metrics = thermalMetrics(ward);
   const prediction = prototypeHealthPrediction(metrics.htsi);
+  if (liveSurge?.date === date && liveSurge.wardId === ward.wardId) prediction.hospitalizationIncrease = Math.round(liveSurge.value);
   const risk = getHTSIBand(metrics.htsi);
   const relevantEffects = getRelevantHealthEffects(metrics.htsi);
   const peak = puneHeatTrend.filter((day) => day.period === "Forecast").reduce((highest, day) => day.score > highest.score ? day : highest, puneHeatTrend.find((day) => day.period === "Forecast")!);
@@ -266,12 +270,14 @@ function HealthImpactPage({ ward }: { ward: HistoricalWardRisk; date: string; on
   </main>;
 }
 function WardsPage({ date, selectedWardId, onWard, section = "ward-overview", onSection, onCityTrend, onExplainRisk }: Pick<WorkspaceProps, "date" | "selectedWardId" | "onWard"> & { section?: WardSection; onSection: (section: WardSection) => void; onCityTrend: () => void; onExplainRisk: (prompt: string) => void }) {
+  const liveSurge = useContext(LiveSurgeContext);
   const summary = useMemo(() => citySummaryForDate(date), [date]);
   const ward = summary.rows.find((row) => row.wardId === selectedWardId) ?? summary.rows[0];
   const metrics = thermalMetrics(ward);
   const htsiRisk = heatMapRiskLevel(ward, "htsi");
   const health = calculateHealthImpact(ward);
   const prediction = prototypeHealthPrediction(metrics.htsi);
+  if (liveSurge?.date === date && liveSurge.wardId === ward.wardId) prediction.hospitalizationIncrease = Math.round(liveSurge.value);
   const [sortBy, setSortBy] = useState<"ward" | "htsi">("ward");
   const [wardOrder, setWardOrder] = useState<"asc" | "desc">("asc");
   const [htsiOrder, setHtsiOrder] = useState<"desc" | "asc">("desc");
@@ -430,6 +436,7 @@ function LegacyReportsPage({ date, reportWardId, onReportWard }: { date: string;
 }
 
 function ReportsPage({ date, selectedWardId, onWard, onDate }: { date: string; selectedWardId: number | null; onWard: (wardId: number) => void; onDate: (date: string) => void }) {
+  const liveSurge = useContext(LiveSurgeContext);
   const summary = useMemo(() => citySummaryForDate(date), [date]);
   const [preview, setPreview] = useState(false); const [confirmReport, setConfirmReport] = useState(false);
   const [reportStartDate, setReportStartDate] = useState(availableRiskDates[0]);
@@ -439,6 +446,7 @@ function ReportsPage({ date, selectedWardId, onWard, onDate }: { date: string; s
   const metrics = thermalMetrics(ward);
   const risk = metrics.htsiRisk;
   const prediction = prototypeHealthPrediction(metrics.htsi);
+  if (liveSurge?.date === date && liveSurge.wardId === ward.wardId) prediction.hospitalizationIncrease = Math.round(liveSurge.value);
   const history = wardHistory(ward.wardId).filter((day) => day.date >= reportStartDate && day.date <= date).slice(-14);
   const historyPeak = history.reduce((highest, day) => thermalMetrics(day).htsi > thermalMetrics(highest).htsi ? day : highest, history[0] ?? ward);
   const historyPeakMetrics = thermalMetrics(historyPeak);
@@ -504,7 +512,20 @@ function App() {
   const [copilotPrompt, setCopilotPrompt] = useState("");
   const [pendingAlertDraft, setPendingAlertDraft] = useState<{ wardId: number; audience: "Resident" | "Hospital" | "Both"; message: string } | null>(null);
   const [responsePlanRequestId, setResponsePlanRequestId] = useState<number | null>(null);
+  const [liveSurge, setLiveSurge] = useState<LiveSurge | null>(null);
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem("saaya-theme", theme); }, [theme]);
+  useEffect(() => {
+    if (selectedWardId === null) return;
+    const requested = { date, wardId: selectedWardId, value: 0 };
+    setLiveSurge(requested);
+    const controller = new AbortController();
+    const params = new URLSearchParams({ date, ward_id: String(selectedWardId) });
+    void fetch(`http://127.0.0.1:8000/predict_surge?${params.toString()}`, { signal: controller.signal })
+      .then(async (response) => { if (!response.ok) throw new Error(`Surge API request failed (${response.status}): ${await response.text()}`); return response.json(); })
+      .then((payload: { hospital_surge_pct?: number }) => setLiveSurge({ ...requested, value: typeof payload.hospital_surge_pct === "number" && Number.isFinite(payload.hospital_surge_pct) ? payload.hospital_surge_pct : 0 }))
+      .catch((error: unknown) => { console.error("Surge API Error:", error); if (!controller.signal.aborted) setLiveSurge(requested); });
+    return () => controller.abort();
+  }, [date, selectedWardId]);
   useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [view]);
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSearchOpen(true); } if (event.key === "Escape") { setSearchOpen(false); setMobileNavOpen(false); } }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, []);
   if (citizen) return <CitizenPortal profile={citizen} onProfile={(profile) => setCitizen(citizenStore.update(profile))} onSignOut={() => { citizenStore.signOut(); setCitizen(null); }} />;
@@ -537,7 +558,7 @@ function App() {
     ...[["Overview", "Current city situation · ward map", "overview"], ["Heat Map", "Where is heat happening?", "heat-map"], ["Ward Analysis", "Risk, exposure and trends", "ward-overview"], ["Health Impact", "Health-intelligence estimates", "health-impact"], ["Forecast", "What is likely to happen next?", "forecast"], ["Alerts", "Review warnings and triggers", "alerts"], ["Response", "Municipal preparedness workflow", "response"], ["Reports", "Generate municipal intelligence", "reports"], ["Settings & Methodology", "Data sources, HTSI and WBGT definitions", "settings"], ["HTSI · Heat Thermal Stress Index", "0–100 modeled thermal-stress screening signal", "ward-overview"], ["WBGT · Screening estimate", "ERA5-derived wet-bulb globe temperature estimate", "settings"], ["Exposure", "Model-derived operational exposure", "ward-overview"]].map(([title, detail, target]) => ({ title, detail, group: "Sections & concepts" as const, view: target as View, keywords: `${title} heat severity model data methodology` })),
   ];
   const chooseSearchItem = (item: SearchItem) => { if (item.wardId) setSelectedWardId(item.wardId); setView(item.view); setSearchOpen(false); setMobileNavOpen(false); };
-  return <><a className="skip-link" href="#main-content" onClick={(event) => { event.preventDefault(); document.getElementById("main-content")?.focus(); document.getElementById("main-content")?.scrollIntoView({ block: "start" }); }}>Skip to main content</a><Sidebar view={navView} onNavigate={(next) => { setView(next); setMobileNavOpen(false); }} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} /><div className={`app-content ${collapsed ? "sidebar-collapsed" : ""}`}><Header date={date} administrator={administrator} ward={selectedWardRisk} theme={theme} onThemeToggle={() => setTheme((current) => current === "light" ? "dark" : "light")} onWard={setSelectedWardId} onSignOut={signOut} onSearch={() => setSearchOpen(true)} onMobileMenu={() => setMobileNavOpen(true)} /><div id="main-content" className="contextual-page" tabIndex={-1}>{content}</div></div>{searchOpen && <SearchOverlay items={searchItems} onChoose={chooseSearchItem} onClose={() => setSearchOpen(false)} />}</>;
+  return <><a className="skip-link" href="#main-content" onClick={(event) => { event.preventDefault(); document.getElementById("main-content")?.focus(); document.getElementById("main-content")?.scrollIntoView({ block: "start" }); }}>Skip to main content</a><Sidebar view={navView} onNavigate={(next) => { setView(next); setMobileNavOpen(false); }} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} /><LiveSurgeContext.Provider value={liveSurge}><div className={`app-content ${collapsed ? "sidebar-collapsed" : ""}`}><Header date={date} administrator={administrator} ward={selectedWardRisk} theme={theme} onThemeToggle={() => setTheme((current) => current === "light" ? "dark" : "light")} onWard={setSelectedWardId} onSignOut={signOut} onSearch={() => setSearchOpen(true)} onMobileMenu={() => setMobileNavOpen(true)} /><div id="main-content" className="contextual-page" tabIndex={-1}>{content}</div></div></LiveSurgeContext.Provider>{searchOpen && <SearchOverlay items={searchItems} onChoose={chooseSearchItem} onClose={() => setSearchOpen(false)} />}</>;
 }
 
 export default App;

@@ -1,0 +1,83 @@
+{
+  "project": "SAAYA / Ushna-Tapasani",
+  "model_name": "Prototype Weather Heat-Associated Demand Surrogate",
+  "model_type": "CatBoost approximation of an evidence-calibrated proxy; not trained on observed admissions",
+  "training_data": {
+    "source_file": "frontend/src/data/puneHistoricalWardRisk.ts",
+    "export_file": "data/SAAYA_Prototype_Weather_Training.csv",
+    "rows": 16008,
+    "ward_count": 58,
+    "date_start": "2024-03-01",
+    "date_end": "2026-05-31",
+    "weather_fields": "ERA5-Seamless ward-level daytime aggregates, 10:00-16:00 IST"
+  },
+  "target": {
+    "name": "hospital_surge_pct",
+    "units": "percentage points above expected baseline",
+    "classification": "evidence_calibrated_proxy_not_observed_admissions",
+    "definition": "max(0, ((1.013 ** max(temperature_daytime_mean_c - reference_c, 0)) - 1) * 100)",
+    "temperature_reference_c": 29.791666666666668,
+    "relative_risk_per_1c": 1.013,
+    "source_assumption": "Project metadata's externally sourced, non-Pune-specific all-cause hospitalization association; applying a daily-mean coefficient to the prototype's 10:00-16:00 temperature is an unvalidated proxy assumption.",
+    "observed_hospital_admission_labels_available": false,
+    "target_distribution": {
+      "count": 16008.0,
+      "mean": 6.368568719180477,
+      "std": 3.334719729592233,
+      "min": 0.0,
+      "10%": 1.3109040336476196,
+      "25%": 3.9621090813041215,
+      "50%": 6.682693513852733,
+      "75%": 8.91033270642776,
+      "90%": 10.468758861815108,
+      "95%": 11.472075260331849,
+      "99%": 13.213292496661522,
+      "max": 14.241535721825848
+    }
+  },
+  "feature_names": [
+    "temperature_daytime_mean_c"
+  ],
+  "excluded_features_and_reasons": {
+    "ward_id": "No observed ward-specific outcome labels to estimate ward effects.",
+    "population": "A percentage uplift does not scale with population; use population only for absolute baseline demand calculations.",
+    "heatwave_duration_and_severity": "Prototype source has daytime mean temperature, not validated daily maximum/observed outcomes; no evidence-supported independent heatwave effect is available.",
+    "elderly_pct": "Not present in the supplied ward data."
+  },
+  "validation": {
+    "method": "Chronological by full calendar year: train 2024, validation 2025, held-out proxy test 2026.",
+    "validation_metrics": {
+      "MAE_percentage_points": 0.0928880882329088,
+      "RMSE_percentage_points": 0.1012605465505489,
+      "R2_proxy_only": 0.9992684604674623
+    },
+    "test_metrics": {
+      "MAE_percentage_points": 0.1056902539305144,
+      "RMSE_percentage_points": 0.11889017760467403,
+      "R2_proxy_only": 0.9985767077859994
+    },
+    "metrics_interpretation": "Measures approximation of the constructed proxy only; does not establish hospital-demand or clinical predictive accuracy."
+  },
+  "prediction_summary_proxy_only": {
+    "count": 16008.0,
+    "mean": 6.270173902209816,
+    "std": 3.294134359009716,
+    "min": 0.0,
+    "10%": 1.262349305958809,
+    "25%": 3.886461121622499,
+    "50%": 6.575828879777373,
+    "75%": 8.778440796545803,
+    "90%": 10.326456432363544,
+    "95%": 11.357847654007664,
+    "99%": 13.037774861427852,
+    "max": 13.283287826584644
+  },
+  "catboost": {
+    "best_iteration": 877,
+    "random_seed": 42,
+    "monotonic_constraint": {
+      "temperature_daytime_mean_c": 1
+    }
+  },
+  "generated_at_utc": "2026-09-27T08:43:13.310190+00:00"
+}

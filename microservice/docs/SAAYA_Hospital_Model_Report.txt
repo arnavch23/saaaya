@@ -1,0 +1,33 @@
+SAAYA PROTOTYPE WEATHER SURGE SURROGATE
+========================================
+
+STATUS
+------
+Retrained from the frontend's 2024-2026 ERA5-Seamless prototype weather rows.
+This is an evidence-calibrated proxy, not a model trained on hospital admissions.
+
+DATA
+----
+Rows: 16008 (58 wards; 276 dates)
+Coverage: 2024-03-01 through 2026-05-31
+Source: frontend/src/data/puneHistoricalWardRisk.ts
+Inputs match the prototype daily daytime temperature field (10:00-16:00 IST).
+
+TARGET
+------
+Evidence-calibrated percentage-point uplift = max(0, (1.013^max(T - 29.7917, 0) - 1) * 100).
+The RR coefficient is external and not Pune-specific. Applying a daily-mean coefficient
+to daytime-mean temperature is an unvalidated proxy assumption. No target range was forced.
+
+VALIDATION
+----------
+Chronological holdout: train 2024, validate 2025, test 2026.
+Validation proxy metrics: {"MAE_percentage_points": 0.0928880882329088, "R2_proxy_only": 0.9992684604674623, "RMSE_percentage_points": 0.1012605465505489}
+Test proxy metrics: {"MAE_percentage_points": 0.1056902539305144, "R2_proxy_only": 0.9985767077859994, "RMSE_percentage_points": 0.11889017760467403}
+These scores measure proxy approximation only, not clinical accuracy.
+
+LIMITATIONS
+-----------
+No real ward-level admissions, elderly shares, or hospital-capacity data are present.
+Heatwave effects are not independently learned or added without outcome evidence.
+Real hospital admissions linked to daily ward weather are required for supervised clinical validation.
