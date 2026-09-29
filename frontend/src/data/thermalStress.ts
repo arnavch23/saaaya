@@ -46,12 +46,12 @@ export function htsiRiskLevel(score: number): RiskLevel {
   return HTSI_RISK_BANDS.find(({ min, max }) => boundedScore >= min && boundedScore <= max)!.risk;
 }
 
-const predictionIncreases: Record<RiskLevel, { hospitalization: [number, number]; mortality: [number, number] }> = {
-  Low: { hospitalization: [2, 5], mortality: [1, 2] },
-  Moderate: { hospitalization: [5, 10], mortality: [2, 4] },
-  High: { hospitalization: [10, 20], mortality: [4, 8] },
-  "Very High": { hospitalization: [20, 30], mortality: [8, 15] },
-  Extreme: { hospitalization: [30, 45], mortality: [15, 25] },
+const predictionIncreases: Record<RiskLevel, { hospitalization: [number, number] }> = {
+  Low: { hospitalization: [2, 5] },
+  Moderate: { hospitalization: [5, 10] },
+  High: { hospitalization: [10, 20] },
+  "Very High": { hospitalization: [20, 30] },
+  Extreme: { hospitalization: [30, 45] },
 };
 
 export function prototypeHealthPrediction(htsi: number): PrototypeHealthPrediction {
@@ -62,7 +62,7 @@ export function prototypeHealthPrediction(htsi: number): PrototypeHealthPredicti
   const progress = (boundedHtsi - band.min) / Math.max(1, band.max - band.min);
   return {
     hospitalizationIncrease: Math.round(increases.hospitalization[0] + progress * (increases.hospitalization[1] - increases.hospitalization[0])),
-    mortalityIncrease: Math.round(increases.mortality[0] + progress * (increases.mortality[1] - increases.mortality[0])),
+    mortalityIncrease: 2,
     riskLevel,
   };
 }
